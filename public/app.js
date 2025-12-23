@@ -451,6 +451,13 @@ function showError(message) {
     setTimeout(() => {
         hideError();
     }, timeout);
+    
+    // Scroll error into view on mobile
+    if (window.innerWidth < 768) {
+        setTimeout(() => {
+            error.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 100);
+    }
 }
 
 function hideError() {
