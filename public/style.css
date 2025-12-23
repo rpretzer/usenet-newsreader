@@ -274,6 +274,265 @@ header h1 {
     background: #555;
 }
 
+/* Mobile Optimizations */
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+        max-width: 100%;
+    }
+
+    header {
+        padding-bottom: 15px;
+        margin-bottom: 15px;
+    }
+
+    header h1 {
+        font-size: 18px;
+        margin-bottom: 10px;
+    }
+
+    .server-config {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .server-config input {
+        flex: 1 1 auto;
+        min-width: 120px;
+        font-size: 16px; /* Prevents zoom on iOS */
+        padding: 12px;
+    }
+
+    .server-config input[type="number"] {
+        min-width: 80px;
+        flex: 0 0 80px;
+    }
+
+    .server-config button {
+        flex: 1 1 100%;
+        padding: 12px 20px;
+        font-size: 16px;
+        min-height: 44px; /* Minimum touch target */
+    }
+
+    .main-content {
+        flex-direction: column;
+        gap: 15px;
+        min-height: auto;
+    }
+
+    .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid #333;
+        padding-right: 0;
+        padding-bottom: 15px;
+        margin-bottom: 15px;
+    }
+
+    .groups-list {
+        max-height: 300px;
+    }
+
+    .group-item {
+        padding: 12px;
+        min-height: 44px; /* Minimum touch target */
+    }
+
+    .group-name {
+        font-size: 13px;
+    }
+
+    .group-info {
+        font-size: 11px;
+    }
+
+    .content {
+        width: 100%;
+    }
+
+    #articles-panel h2 {
+        font-size: 16px;
+        margin-bottom: 12px;
+    }
+
+    .post-btn {
+        padding: 10px 16px;
+        font-size: 14px;
+        min-height: 44px;
+    }
+
+    .article-item {
+        padding: 12px;
+        min-height: 60px; /* Larger touch target */
+    }
+
+    .article-subject {
+        font-size: 13px;
+        margin-bottom: 6px;
+    }
+
+    .article-meta {
+        font-size: 11px;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .article-header {
+        padding-bottom: 12px;
+        margin-bottom: 15px;
+    }
+
+    .article-header button {
+        padding: 10px 16px;
+        font-size: 14px;
+        min-height: 44px;
+        margin-bottom: 12px;
+    }
+
+    .article-header h3 {
+        font-size: 16px;
+        margin-bottom: 10px;
+    }
+
+    .article-body {
+        font-size: 13px;
+        line-height: 1.7;
+        padding: 15px;
+        max-height: none;
+        overflow-y: visible;
+    }
+
+    /* Modal optimizations for mobile */
+    .modal-content {
+        width: 95%;
+        max-width: 95%;
+        max-height: 95vh;
+        margin: 10px;
+    }
+
+    .modal-header {
+        padding: 15px;
+    }
+
+    .modal-header h2 {
+        font-size: 18px;
+    }
+
+    .modal-body {
+        padding: 15px;
+    }
+
+    .form-group input,
+    .form-group textarea {
+        font-size: 16px; /* Prevents zoom on iOS */
+        padding: 12px;
+    }
+
+    .form-group textarea {
+        min-height: 200px;
+    }
+
+    .modal-actions {
+        flex-direction: column-reverse;
+        gap: 10px;
+    }
+
+    .cancel-btn,
+    .submit-btn {
+        width: 100%;
+        padding: 14px;
+        font-size: 16px;
+        min-height: 44px;
+    }
+
+    .loading, .error {
+        top: 10px;
+        right: 10px;
+        left: 10px;
+        width: auto;
+        padding: 12px 15px;
+        font-size: 14px;
+    }
+
+    .welcome {
+        padding: 30px 20px;
+        font-size: 14px;
+    }
+}
+
+/* Very small screens */
+@media (max-width: 480px) {
+    .container {
+        padding: 8px;
+    }
+
+    header h1 {
+        font-size: 16px;
+    }
+
+    .server-config input {
+        font-size: 16px;
+        padding: 14px;
+    }
+
+    .group-search {
+        font-size: 16px; /* Prevents zoom on iOS */
+        padding: 12px;
+    }
+
+    .groups-list {
+        max-height: 250px;
+    }
+
+    .article-body {
+        font-size: 12px;
+        padding: 12px;
+    }
+
+    .modal-content {
+        width: 100%;
+        max-width: 100%;
+        max-height: 100vh;
+        margin: 0;
+        border-radius: 0;
+    }
+}
+
+/* Touch device optimizations */
+@media (hover: none) and (pointer: coarse) {
+    /* Larger touch targets for touch devices */
+    button, .group-item, .article-item {
+        -webkit-tap-highlight-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .group-item:active,
+    .article-item:active {
+        background: #3a3a3a;
+    }
+
+    button:active {
+        opacity: 0.8;
+        transform: scale(0.98);
+    }
+}
+
+/* Prevent text selection on buttons (better UX) */
+button, .post-btn, .close-btn {
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+/* Improve scrolling on mobile */
+.groups-list,
+.articles-list,
+.article-body {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}
+
 /* Post/Reply buttons */
 .post-btn {
     padding: 8px 16px;
