@@ -1,9 +1,13 @@
 const express = require('express');
 const path = require('path');
+const compression = require('compression');
 const NNTPClient = require('./nntp-client');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Enable gzip compression for all responses
+app.use(compression());
 
 // CORS configuration for GitHub Pages deployment
 // Allow all origins for mobile browser compatibility
@@ -36,6 +40,9 @@ app.use(express.json());
 
 // Store active NNTP connections
 const connections = new Map();
+
+// Simple in-memory cache for groups (5 minute TTL)
+const groupsCache = new Map();
 
 // Helper to clear connections for a server (useful when credentials change)
 function clearConnections(server, port = 119, ssl = false) {
@@ -134,6 +141,16 @@ app.get('/api/groups', async (req, res) => {
     const username = req.query.username || null;
     const password = req.query.password || null;
     
+    // Create cache key
+    const cacheKey = `${server}:${port}:${ssl}:${username || 'anon'}`;
+    const cached = groupsCache.get(cacheKey);
+    
+    // Return cached data if available and not expired (5 minutes)
+    if (cached && (Date.now() - cached.timestamp) < 300000) {
+      res.setHeader('X-Cache', 'HIT');
+      return res.json(cached.data);
+    }
+    
     const client = await getConnection(server, port, ssl, username, password);
     const groups = await client.list();
     
@@ -152,6 +169,20 @@ app.get('/api/groups', async (req, res) => {
         };
       });
     
+    // Cache the result
+    groupsCache.set(cacheKey, {
+      data: textGroups,
+      timestamp: Date.now()
+    });
+    
+    // Clean up old cache entries (older than 10 minutes)
+    for (const [key, value] of groupsCache.entries()) {
+      if (Date.now() - value.timestamp > 600000) {
+        groupsCache.delete(key);
+      }
+    }
+    
+    res.setHeader('X-Cache', 'MISS');
     res.json(textGroups);
   } catch (error) {
     res.status(500).json({ error: error.message });

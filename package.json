@@ -7,11 +7,15 @@
     "start": "node server.js",
     "dev": "node server.js"
   },
-  "keywords": ["usenet", "newsreader", "nntp"],
+  "keywords": [
+    "usenet",
+    "newsreader",
+    "nntp"
+  ],
   "author": "rpretzer",
   "license": "MIT",
   "dependencies": {
+    "compression": "^1.8.1",
     "express": "^4.18.2"
   }
 }
-

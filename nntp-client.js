@@ -251,16 +251,73 @@ class NNTPClient {
   async getHeaders(start, end) {
     const headers = [];
     
-    for (let i = start; i <= end; i++) {
-      try {
-        const header = await this.head(i);
-        header.number = i;
-        headers.push(header);
-      } catch (err) {
-        // Skip articles that can't be read
-        continue;
+    // Try XOVER first (much faster - single command for all articles)
+    try {
+      const xoverResponse = await this.sendCommand(`XOVER ${start}-${end}`, true);
+      
+      // Parse XOVER format: article-number\tsubject\tfrom\tdate\tmessage-id\treferences\tbytes\tlines
+      for (const line of xoverResponse.lines) {
+        if (!line || line.trim() === '') continue;
+        const parts = line.split('\t');
+        if (parts.length >= 5) {
+          const articleNum = parseInt(parts[0]);
+          if (!isNaN(articleNum) && articleNum >= start && articleNum <= end) {
+            headers.push({
+              number: articleNum,
+              subject: parts[1] || '(no subject)',
+              from: parts[2] || 'unknown',
+              date: parts[3] || '',
+              messageId: parts[4] || ''
+            });
+          }
+        }
       }
+      
+      // Sort by article number (XOVER may not return in order)
+      headers.sort((a, b) => a.number - b.number);
+      
+      if (headers.length > 0) {
+        return headers;
+      }
+    } catch (xoverErr) {
+      // XOVER not supported or failed, fall back to individual HEAD commands
+      console.log('XOVER not available, using HEAD commands');
     }
+    
+    // Fallback: use individual HEAD commands (slower but more compatible)
+    // Load in parallel batches for better performance
+    const batchSize = 5;
+    const batches = [];
+    
+    for (let i = start; i <= end; i += batchSize) {
+      const batchEnd = Math.min(i + batchSize - 1, end);
+      batches.push({ start: i, end: batchEnd });
+    }
+    
+    // Process batches in parallel
+    const batchPromises = batches.map(async (batch) => {
+      const batchHeaders = [];
+      for (let i = batch.start; i <= batch.end; i++) {
+        try {
+          const header = await this.head(i);
+          header.number = i;
+          batchHeaders.push(header);
+        } catch (err) {
+          // Skip articles that can't be read (might be expired/deleted)
+          continue;
+        }
+      }
+      return batchHeaders;
+    });
+    
+    const batchResults = await Promise.all(batchPromises);
+    
+    // Flatten and sort results
+    for (const batchHeaders of batchResults) {
+      headers.push(...batchHeaders);
+    }
+    
+    headers.sort((a, b) => a.number - b.number);
     
     return headers;
   }
