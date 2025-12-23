@@ -24,8 +24,8 @@ header {
 }
 
 header h1 {
-    font-size: 24px;
-    margin-bottom: 15px;
+    font-size: 20px;
+    margin-bottom: 12px;
     color: #fff;
 }
 
@@ -77,9 +77,25 @@ header h1 {
 }
 
 .sidebar h2 {
-    font-size: 18px;
-    margin-bottom: 15px;
+    font-size: 14px;
+    margin-bottom: 10px;
     color: #fff;
+}
+
+.group-search {
+    width: 100%;
+    padding: 6px 10px;
+    margin-bottom: 10px;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    color: #e0e0e0;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+}
+
+.group-search:focus {
+    outline: none;
+    border-color: #666;
 }
 
 .groups-list {
@@ -88,8 +104,8 @@ header h1 {
 }
 
 .group-item {
-    padding: 10px;
-    margin-bottom: 5px;
+    padding: 6px 8px;
+    margin-bottom: 3px;
     background: #2a2a2a;
     border: 1px solid #333;
     cursor: pointer;
@@ -108,11 +124,12 @@ header h1 {
 .group-name {
     font-weight: bold;
     color: #fff;
-    margin-bottom: 3px;
+    margin-bottom: 2px;
+    font-size: 12px;
 }
 
 .group-info {
-    font-size: 12px;
+    font-size: 10px;
     color: #999;
 }
 
@@ -128,19 +145,19 @@ header h1 {
 }
 
 #articles-panel h2 {
-    font-size: 18px;
-    margin-bottom: 15px;
+    font-size: 14px;
+    margin-bottom: 10px;
     color: #fff;
 }
 
 .articles-list {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 6px;
 }
 
 .article-item {
-    padding: 15px;
+    padding: 8px 10px;
     background: #2a2a2a;
     border: 1px solid #333;
     cursor: pointer;
@@ -154,14 +171,15 @@ header h1 {
 .article-subject {
     font-weight: bold;
     color: #fff;
-    margin-bottom: 5px;
+    margin-bottom: 3px;
+    font-size: 12px;
 }
 
 .article-meta {
-    font-size: 12px;
+    font-size: 10px;
     color: #999;
     display: flex;
-    gap: 15px;
+    gap: 12px;
 }
 
 #article-panel {
@@ -172,8 +190,8 @@ header h1 {
 
 .article-header {
     border-bottom: 1px solid #333;
-    padding-bottom: 15px;
-    margin-bottom: 20px;
+    padding-bottom: 10px;
+    margin-bottom: 12px;
 }
 
 .article-header button {
@@ -192,24 +210,24 @@ header h1 {
 }
 
 .article-header h3 {
-    font-size: 18px;
+    font-size: 14px;
     color: #fff;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
 }
 
-.article-meta {
-    font-size: 12px;
+.article-header .article-meta {
+    font-size: 10px;
     color: #999;
     display: flex;
-    gap: 15px;
+    gap: 12px;
 }
 
 .article-body {
     white-space: pre-wrap;
-    font-size: 14px;
-    line-height: 1.8;
+    font-size: 12px;
+    line-height: 1.6;
     color: #e0e0e0;
-    padding: 20px;
+    padding: 12px;
     background: #2a2a2a;
     border: 1px solid #333;
     max-height: 600px;

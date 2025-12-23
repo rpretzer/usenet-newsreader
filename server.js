@@ -47,12 +47,17 @@ app.get('/api/groups', async (req, res) => {
     // Filter to text-only groups and format
     const textGroups = groups
       .filter(g => !g.name.includes('.binaries') && !g.name.includes('.bin'))
-      .map(g => ({
-        name: g.name,
-        description: g.description || '',
-        count: g.count || 0
-      }))
-      .slice(0, 100); // Limit to first 100 for performance
+      .map(g => {
+        // Calculate actual article count: last - first + 1
+        const articleCount = g.last >= g.first ? (g.last - g.first + 1) : 0;
+        return {
+          name: g.name,
+          description: g.description || '',
+          count: articleCount,
+          first: g.first,
+          last: g.last
+        };
+      });
     
     res.json(textGroups);
   } catch (error) {

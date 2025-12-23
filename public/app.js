@@ -5,6 +5,7 @@ let currentUsername = '';
 let currentPassword = '';
 let currentGroup = null;
 let currentArticle = null;
+let allGroups = []; // Store all groups for filtering
 
 // DOM elements
 const serverInput = document.getElementById('server');
@@ -12,6 +13,7 @@ const portInput = document.getElementById('port');
 const usernameInput = document.getElementById('username');
 const passwordInput = document.getElementById('password');
 const connectBtn = document.getElementById('connect');
+const groupSearchInput = document.getElementById('group-search');
 const groupsList = document.getElementById('groups-list');
 const articlesPanel = document.getElementById('articles-panel');
 const articlePanel = document.getElementById('article-panel');
@@ -69,13 +71,34 @@ connectBtn.addEventListener('click', async () => {
         }
         
         const groups = await response.json();
-        displayGroups(groups);
+        allGroups = groups; // Store all groups
+        filterAndDisplayGroups();
     } catch (err) {
         showError(`Connection failed: ${err.message}`);
     } finally {
         hideLoading();
     }
 });
+
+// Search/filter groups
+groupSearchInput.addEventListener('input', (e) => {
+    filterAndDisplayGroups();
+});
+
+function filterAndDisplayGroups() {
+    const searchTerm = groupSearchInput.value.toLowerCase().trim();
+    
+    let filteredGroups = allGroups;
+    
+    if (searchTerm) {
+        filteredGroups = allGroups.filter(group => 
+            group.name.toLowerCase().includes(searchTerm) ||
+            (group.description && group.description.toLowerCase().includes(searchTerm))
+        );
+    }
+    
+    displayGroups(filteredGroups);
+}
 
 // Display groups
 function displayGroups(groups) {
@@ -86,12 +109,22 @@ function displayGroups(groups) {
         return;
     }
     
+    // Show count if filtered
+    if (groupSearchInput.value.trim()) {
+        const countInfo = document.createElement('div');
+        countInfo.className = 'info';
+        countInfo.style.padding = '8px';
+        countInfo.style.marginBottom = '8px';
+        countInfo.textContent = `Showing ${groups.length} of ${allGroups.length} groups`;
+        groupsList.appendChild(countInfo);
+    }
+    
     groups.forEach(group => {
         const item = document.createElement('div');
         item.className = 'group-item';
         item.innerHTML = `
             <div class="group-name">${escapeHtml(group.name)}</div>
-            <div class="group-info">${group.count} articles</div>
+            <div class="group-info">${group.count.toLocaleString()} articles</div>
         `;
         
         item.addEventListener('click', () => {

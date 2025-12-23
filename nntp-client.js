@@ -163,13 +163,13 @@ class NNTPClient {
       if (!line || line.trim() === '') continue;
       
       const parts = line.split(/\s+/);
-      if (parts.length >= 4) {
+      if (parts.length >= 3) {
+        // NNTP LIST format: groupname last first [flags] [description]
         groups.push({
           name: parts[0],
           last: parseInt(parts[1]) || 0,
           first: parseInt(parts[2]) || 0,
-          count: parseInt(parts[3]) || 0,
-          description: parts.slice(4).join(' ') || ''
+          description: parts.slice(3).join(' ') || ''
         });
       }
     }
