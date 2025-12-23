@@ -46,8 +46,28 @@ function buildQueryString(baseParams) {
 connectBtn.addEventListener('click', async () => {
     currentServer = serverInput.value.trim();
     currentPort = parseInt(portInput.value) || 119;
-    currentUsername = usernameInput.value.trim();
-    currentPassword = passwordInput.value.trim();
+    const newUsername = usernameInput.value.trim();
+    const newPassword = passwordInput.value.trim();
+    
+    // If credentials changed, clear old connections first
+    if (newUsername !== currentUsername || newPassword !== currentPassword) {
+        try {
+            await fetch('/api/clear-connections', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    server: currentServer,
+                    port: currentPort,
+                    ssl: currentSsl
+                })
+            });
+        } catch (err) {
+            // Ignore clear errors, continue with connection
+        }
+    }
+    
+    currentUsername = newUsername;
+    currentPassword = newPassword;
     
     if (!currentServer) {
         showError('Please enter a server address');

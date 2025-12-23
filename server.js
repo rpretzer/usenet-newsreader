@@ -12,9 +12,40 @@ app.use(express.json());
 // Store active NNTP connections
 const connections = new Map();
 
+// Helper to clear connections for a server (useful when credentials change)
+function clearConnections(server, port = 119, ssl = false) {
+  const pattern = `${server}:${port}:${ssl}:`;
+  for (const [key, client] of connections.entries()) {
+    if (key.startsWith(pattern)) {
+      try {
+        client.disconnect();
+      } catch (err) {
+        // Ignore disconnect errors
+      }
+      connections.delete(key);
+    }
+  }
+}
+
 // Helper function to get or create NNTP connection
 async function getConnection(server, port = 119, ssl = false, username = null, password = null) {
-  const key = `${server}:${port}:${ssl}:${username || 'anon'}`;
+  // Create a key that includes credentials (using a simple hash of password for security)
+  const credHash = password ? Buffer.from(password).toString('base64').substring(0, 16) : 'anon';
+  const key = `${server}:${port}:${ssl}:${username || 'anon'}:${credHash}`;
+  
+  // Check if we have a connection with different credentials for same user
+  // If so, disconnect the old one
+  const oldKeyPattern = `${server}:${port}:${ssl}:${username || 'anon'}:`;
+  for (const [existingKey, client] of connections.entries()) {
+    if (existingKey.startsWith(oldKeyPattern) && existingKey !== key) {
+      try {
+        client.disconnect();
+      } catch (err) {
+        // Ignore disconnect errors
+      }
+      connections.delete(existingKey);
+    }
+  }
   
   if (!connections.has(key)) {
     const client = new NNTPClient({
@@ -31,6 +62,29 @@ async function getConnection(server, port = 119, ssl = false, username = null, p
   
   return connections.get(key);
 }
+
+// API: Clear connections (for debugging/credential changes)
+app.post('/api/clear-connections', (req, res) => {
+  const server = req.body.server || null;
+  const port = req.body.port || 119;
+  const ssl = req.body.ssl === true;
+  
+  if (server) {
+    clearConnections(server, port, ssl);
+  } else {
+    // Clear all connections
+    for (const [key, client] of connections.entries()) {
+      try {
+        client.disconnect();
+      } catch (err) {
+        // Ignore disconnect errors
+      }
+    }
+    connections.clear();
+  }
+  
+  res.json({ success: true, message: 'Connections cleared' });
+});
 
 // API: List newsgroups
 app.get('/api/groups', async (req, res) => {
