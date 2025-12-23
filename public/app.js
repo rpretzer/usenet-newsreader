@@ -1,3 +1,6 @@
+// API base URL - defaults to same origin, can be overridden via config
+const API_BASE_URL = window.API_BASE_URL || '';
+
 let currentServer = 'news.eternal-september.org';
 let currentPort = 119;
 let currentSsl = false;
@@ -34,6 +37,11 @@ const postFrom = document.getElementById('post-from');
 const postSubject = document.getElementById('post-subject');
 const postBody = document.getElementById('post-body');
 
+// Helper function to build API URL
+function buildApiUrl(endpoint) {
+    return `${API_BASE_URL}${endpoint}`;
+}
+
 // Helper function to build query string with auth
 function buildQueryString(baseParams) {
     const params = new URLSearchParams(baseParams);
@@ -52,7 +60,7 @@ connectBtn.addEventListener('click', async () => {
     // If credentials changed, clear old connections first
     if (newUsername !== currentUsername || newPassword !== currentPassword) {
         try {
-            await fetch('/api/clear-connections', {
+            await fetch(buildApiUrl('/api/clear-connections'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -83,7 +91,7 @@ connectBtn.addEventListener('click', async () => {
             port: currentPort,
             ssl: currentSsl
         });
-        const response = await fetch(`/api/groups?${query}`);
+        const response = await fetch(buildApiUrl(`/api/groups?${query}`));
         
         if (!response.ok) {
             const data = await response.json();
@@ -177,7 +185,7 @@ async function loadArticles(groupName) {
             ssl: currentSsl,
             limit: 20
         });
-        const response = await fetch(`/api/groups/${encodeURIComponent(groupName)}/articles?${query}`);
+        const response = await fetch(buildApiUrl(`/api/groups/${encodeURIComponent(groupName)}/articles?${query}`));
         
         if (!response.ok) {
             const data = await response.json();
@@ -234,7 +242,7 @@ async function loadArticle(articleNumber) {
             port: currentPort,
             ssl: currentSsl
         });
-        const response = await fetch(`/api/articles/${articleNumber}?${query}`);
+        const response = await fetch(buildApiUrl(`/api/articles/${articleNumber}?${query}`));
         
         if (!response.ok) {
             const data = await response.json();
@@ -367,9 +375,9 @@ submitPost.addEventListener('click', async () => {
         if (currentUsername) payload.username = currentUsername;
         if (currentPassword) payload.password = currentPassword;
         
-        let endpoint = '/api/post';
+        let endpoint = buildApiUrl('/api/post');
         if (currentArticle) {
-            endpoint = '/api/reply';
+            endpoint = buildApiUrl('/api/reply');
             payload.replyTo = currentArticle.number;
         }
         

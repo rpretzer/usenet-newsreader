@@ -5,6 +5,30 @@ const NNTPClient = require('./nntp-client');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// CORS configuration for GitHub Pages deployment
+const allowedOrigins = [
+  'https://usenet.rspmgmt.com',
+  'https://rpretzer.github.io',
+  'http://localhost:3000'
+];
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin) || !origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+  
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+    return;
+  }
+  
+  next();
+});
+
 // Serve static files
 app.use(express.static('public'));
 app.use(express.json());

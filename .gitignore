@@ -4,4 +4,7 @@ node_modules/
 .DS_Store
 dist/
 build/
+# Don't ignore CNAME for GitHub Pages
+!.github/
+!.github/**
 
