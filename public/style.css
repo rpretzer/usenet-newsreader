@@ -166,6 +166,15 @@ header h1 {
     display: flex;
     flex-direction: column;
     gap: 6px;
+    max-height: calc(100vh - 300px);
+    overflow-y: auto;
+}
+
+.loading-more {
+    text-align: center;
+    padding: 15px;
+    color: #999;
+    font-style: italic;
 }
 
 .article-item {

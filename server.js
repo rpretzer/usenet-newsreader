@@ -199,15 +199,28 @@ app.get('/api/groups/:group/articles', async (req, res) => {
     const username = req.query.username || null;
     const password = req.query.password || null;
     const limit = parseInt(req.query.limit) || 20;
+    const offset = parseInt(req.query.offset) || 0; // New: support pagination
     
     const client = await getConnection(server, port, ssl, username, password);
     
     // Select the group
     const info = await client.group(group);
     
-    // Get article headers
-    const start = Math.max(info.first, info.last - limit + 1);
-    const end = info.last;
+    // Calculate article range
+    // offset=0 means start from the newest articles (last)
+    // We load articles in reverse order (newest first)
+    const totalArticles = info.last >= info.first ? (info.last - info.first + 1) : 0;
+    const startOffset = Math.max(0, totalArticles - limit - offset);
+    const endOffset = totalArticles - offset;
+    
+    const start = Math.max(info.first, info.first + startOffset);
+    const end = Math.min(info.last, info.first + endOffset - 1);
+    
+    // Check if we've reached the beginning
+    if (start > end || start < info.first) {
+      res.json({ articles: [], hasMore: false, first: info.first, last: info.last, total: totalArticles });
+      return;
+    }
     
     // Get headers for multiple articles
     const headers = await client.getHeaders(start, end);
@@ -220,7 +233,17 @@ app.get('/api/groups/:group/articles', async (req, res) => {
       messageId: h.messageId || ''
     }));
     
-    res.json(articles);
+    // Check if there are more articles to load
+    const hasMore = (offset + articles.length) < totalArticles;
+    
+    res.json({
+      articles: articles,
+      hasMore: hasMore,
+      first: info.first,
+      last: info.last,
+      total: totalArticles,
+      loaded: offset + articles.length
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

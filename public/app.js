@@ -9,6 +9,10 @@ let currentPassword = '';
 let currentGroup = null;
 let currentArticle = null;
 let allGroups = []; // Store all groups for filtering
+let articleOffset = 0; // Track how many articles we've loaded
+let hasMoreArticles = false; // Track if more articles are available
+let isLoadingMore = false; // Prevent multiple simultaneous loads
+let groupInfo = null; // Store group info (first, last, total)
 
 // DOM elements
 const serverInput = document.getElementById('server');
@@ -192,22 +196,41 @@ function displayGroups(groups) {
 }
 
 // Load articles for a group
-async function loadArticles(groupName) {
+async function loadArticles(groupName, append = false) {
+    if (groupName !== currentGroup) {
+        // New group - reset pagination
+        articleOffset = 0;
+        hasMoreArticles = false;
+        groupInfo = null;
+        if (!append) {
+            articlesList.innerHTML = '';
+        }
+    }
+    
     currentGroup = groupName;
     currentGroupTitle.textContent = groupName;
     
-    showLoading();
-    hideError();
-    welcome.style.display = 'none';
-    articlesPanel.style.display = 'block';
-    articlePanel.style.display = 'none';
+    if (!append) {
+        showLoading();
+        hideError();
+        welcome.style.display = 'none';
+        articlesPanel.style.display = 'block';
+        articlePanel.style.display = 'none';
+    }
+    
+    if (isLoadingMore) {
+        return; // Already loading
+    }
+    
+    isLoadingMore = true;
     
     try {
         const query = buildQueryString({
             server: currentServer,
             port: currentPort,
             ssl: currentSsl,
-            limit: 20
+            limit: 20,
+            offset: articleOffset
         });
         const response = await fetch(buildApiUrl(`/api/groups/${encodeURIComponent(groupName)}/articles?${query}`));
         
@@ -216,27 +239,63 @@ async function loadArticles(groupName) {
             throw new Error(data.error || 'Failed to load articles');
         }
         
-        const articles = await response.json();
-        displayArticles(articles);
+        const data = await response.json();
+        const articles = data.articles || data; // Support both old and new format
+        
+        // Store group info
+        if (data.first !== undefined) {
+            groupInfo = {
+                first: data.first,
+                last: data.last,
+                total: data.total,
+                loaded: data.loaded || articleOffset + articles.length
+            };
+            hasMoreArticles = data.hasMore !== undefined ? data.hasMore : (groupInfo.loaded < groupInfo.total);
+        }
+        
+        if (articles.length > 0) {
+            displayArticles(articles, append);
+            articleOffset += articles.length;
+        } else {
+            hasMoreArticles = false;
+        }
     } catch (err) {
-        showError(`Failed to load articles: ${err.message}`);
+        if (!append) {
+            showError(`Failed to load articles: ${err.message}`);
+        }
     } finally {
-        hideLoading();
+        isLoadingMore = false;
+        if (!append) {
+            hideLoading();
+        }
     }
 }
 
 // Display articles
-function displayArticles(articles) {
-    articlesList.innerHTML = '';
+function displayArticles(articles, append = false) {
+    if (!append) {
+        articlesList.innerHTML = '';
+    }
     
-    if (articles.length === 0) {
+    // Remove "no articles" or "loading more" messages if present
+    const existingMessages = articlesList.querySelectorAll('.info, .loading-more');
+    existingMessages.forEach(msg => msg.remove());
+    
+    if (articles.length === 0 && !append) {
         articlesList.innerHTML = '<p class="info">No articles found</p>';
         return;
     }
     
     articles.forEach(article => {
+        // Check if article already exists (prevent duplicates)
+        const existing = articlesList.querySelector(`[data-article-number="${article.number}"]`);
+        if (existing) {
+            return;
+        }
+        
         const item = document.createElement('div');
         item.className = 'article-item';
+        item.setAttribute('data-article-number', article.number);
         item.innerHTML = `
             <div class="article-subject">${escapeHtml(article.subject)}</div>
             <div class="article-meta">
@@ -251,6 +310,20 @@ function displayArticles(articles) {
         
         articlesList.appendChild(item);
     });
+    
+    // Add loading indicator or end message
+    if (hasMoreArticles) {
+        const loadingMore = document.createElement('div');
+        loadingMore.className = 'loading-more info';
+        loadingMore.textContent = 'Scroll for more articles...';
+        loadingMore.id = 'loading-more-indicator';
+        articlesList.appendChild(loadingMore);
+    } else if (groupInfo && groupInfo.loaded >= groupInfo.total) {
+        const endMessage = document.createElement('div');
+        endMessage.className = 'info';
+        endMessage.textContent = `All ${groupInfo.total.toLocaleString()} articles loaded`;
+        articlesList.appendChild(endMessage);
+    }
 }
 
 // Load article body
