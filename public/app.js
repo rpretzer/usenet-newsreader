@@ -445,9 +445,11 @@ function hideLoading() {
 function showError(message) {
     error.textContent = message;
     error.style.display = 'block';
+    // Show error longer on mobile (10 seconds instead of 5)
+    const timeout = window.innerWidth < 768 ? 10000 : 5000;
     setTimeout(() => {
         hideError();
-    }, 5000);
+    }, timeout);
 }
 
 function hideError() {
