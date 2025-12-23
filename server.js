@@ -47,6 +47,20 @@ async function getConnection(server, port = 119, ssl = false, username = null, p
     }
   }
   
+  // Check if existing connection is still valid
+  if (connections.has(key)) {
+    const client = connections.get(key);
+    if (!client.isConnected()) {
+      // Connection is dead, remove it and create a new one
+      try {
+        client.disconnect();
+      } catch (err) {
+        // Ignore disconnect errors
+      }
+      connections.delete(key);
+    }
+  }
+  
   if (!connections.has(key)) {
     const client = new NNTPClient({
       host: server,

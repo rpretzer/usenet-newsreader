@@ -83,12 +83,30 @@ class NNTPClient {
   }
 
   setupSocket() {
-    // Buffer is managed per-command
+    // Handle socket close/error events
+    this.socket.on('close', () => {
+      this.connected = false;
+    });
+    
+    this.socket.on('error', (err) => {
+      this.connected = false;
+    });
+    
+    this.socket.on('end', () => {
+      this.connected = false;
+    });
+  }
+
+  isConnected() {
+    return this.socket && 
+           this.socket.writable && 
+           !this.socket.destroyed &&
+           this.connected;
   }
 
   sendCommand(command, expectMultiline = false) {
     return new Promise((resolve, reject) => {
-      if (!this.socket || !this.socket.writable) {
+      if (!this.isConnected()) {
         reject(new Error('Not connected'));
         return;
       }
@@ -294,7 +312,7 @@ class NNTPClient {
 
   sendMultilineData(data) {
     return new Promise((resolve, reject) => {
-      if (!this.socket || !this.socket.writable) {
+      if (!this.isConnected()) {
         reject(new Error('Not connected'));
         return;
       }
