@@ -208,12 +208,20 @@ class NNTPClient {
   }
 
   async head(articleNumber) {
+    // Use relative article number (just the number, not <number>)
     const response = await this.sendCommand(`HEAD ${articleNumber}`, true);
+    if (response.code === 423) {
+      throw new Error(`No such article: ${articleNumber}`);
+    }
     return this.parseHeaders(response.lines);
   }
 
   async body(articleNumber) {
+    // Use relative article number (just the number, not <number>)
     const response = await this.sendCommand(`BODY ${articleNumber}`, true);
+    if (response.code === 423) {
+      throw new Error(`No such article: ${articleNumber}`);
+    }
     return response.lines.join('\n');
   }
 

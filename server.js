@@ -204,8 +204,15 @@ app.get('/api/articles/:number', async (req, res) => {
     const ssl = req.query.ssl === 'true';
     const username = req.query.username || null;
     const password = req.query.password || null;
+    const group = req.query.group || null;
     
     const client = await getConnection(server, port, ssl, username, password);
+    
+    // If group is provided, select it first (required for article access)
+    if (group) {
+      await client.group(group);
+    }
+    
     const body = await client.body(number);
     
     res.json({ body: body });

@@ -264,7 +264,8 @@ async function loadArticle(articleNumber) {
         const query = buildQueryString({
             server: currentServer,
             port: currentPort,
-            ssl: currentSsl
+            ssl: currentSsl,
+            group: currentGroup  // Include group name for article access
         });
         const response = await fetch(buildApiUrl(`/api/articles/${articleNumber}?${query}`));
         
