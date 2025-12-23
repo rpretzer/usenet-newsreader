@@ -1,0 +1,258 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Courier New', monospace;
+    background: #1a1a1a;
+    color: #e0e0e0;
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+header {
+    border-bottom: 2px solid #333;
+    padding-bottom: 20px;
+    margin-bottom: 20px;
+}
+
+header h1 {
+    font-size: 24px;
+    margin-bottom: 15px;
+    color: #fff;
+}
+
+.server-config {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.server-config input {
+    padding: 8px 12px;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    color: #e0e0e0;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+}
+
+.server-config input:focus {
+    outline: none;
+    border-color: #666;
+}
+
+.server-config button {
+    padding: 8px 20px;
+    background: #444;
+    border: 1px solid #555;
+    color: #fff;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+}
+
+.server-config button:hover {
+    background: #555;
+}
+
+.main-content {
+    display: flex;
+    gap: 20px;
+    min-height: 600px;
+}
+
+.sidebar {
+    width: 300px;
+    flex-shrink: 0;
+    border-right: 1px solid #333;
+    padding-right: 20px;
+}
+
+.sidebar h2 {
+    font-size: 18px;
+    margin-bottom: 15px;
+    color: #fff;
+}
+
+.groups-list {
+    max-height: 700px;
+    overflow-y: auto;
+}
+
+.group-item {
+    padding: 10px;
+    margin-bottom: 5px;
+    background: #2a2a2a;
+    border: 1px solid #333;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.group-item:hover {
+    background: #333;
+}
+
+.group-item.active {
+    background: #444;
+    border-color: #666;
+}
+
+.group-name {
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 3px;
+}
+
+.group-info {
+    font-size: 12px;
+    color: #999;
+}
+
+.content {
+    flex: 1;
+    min-width: 0;
+}
+
+.welcome {
+    padding: 40px;
+    text-align: center;
+    color: #666;
+}
+
+#articles-panel h2 {
+    font-size: 18px;
+    margin-bottom: 15px;
+    color: #fff;
+}
+
+.articles-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.article-item {
+    padding: 15px;
+    background: #2a2a2a;
+    border: 1px solid #333;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.article-item:hover {
+    background: #333;
+}
+
+.article-subject {
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 5px;
+}
+
+.article-meta {
+    font-size: 12px;
+    color: #999;
+    display: flex;
+    gap: 15px;
+}
+
+#article-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.article-header {
+    border-bottom: 1px solid #333;
+    padding-bottom: 15px;
+    margin-bottom: 20px;
+}
+
+.article-header button {
+    padding: 6px 12px;
+    background: #444;
+    border: 1px solid #555;
+    color: #fff;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    margin-bottom: 10px;
+}
+
+.article-header button:hover {
+    background: #555;
+}
+
+.article-header h3 {
+    font-size: 18px;
+    color: #fff;
+    margin-bottom: 10px;
+}
+
+.article-meta {
+    font-size: 12px;
+    color: #999;
+    display: flex;
+    gap: 15px;
+}
+
+.article-body {
+    white-space: pre-wrap;
+    font-size: 14px;
+    line-height: 1.8;
+    color: #e0e0e0;
+    padding: 20px;
+    background: #2a2a2a;
+    border: 1px solid #333;
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.loading, .error {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 15px 20px;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 4px;
+    z-index: 1000;
+}
+
+.error {
+    background: #3a1a1a;
+    border-color: #a44;
+    color: #faa;
+}
+
+.info {
+    color: #666;
+    font-style: italic;
+    padding: 20px;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #1a1a1a;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #444;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
