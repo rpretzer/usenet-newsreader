@@ -13,14 +13,16 @@ app.use(express.json());
 const connections = new Map();
 
 // Helper function to get or create NNTP connection
-async function getConnection(server, port = 119, ssl = false) {
-  const key = `${server}:${port}:${ssl}`;
+async function getConnection(server, port = 119, ssl = false, username = null, password = null) {
+  const key = `${server}:${port}:${ssl}:${username || 'anon'}`;
   
   if (!connections.has(key)) {
     const client = new NNTPClient({
       host: server,
       port: port,
-      ssl: ssl
+      ssl: ssl,
+      username: username,
+      password: password
     });
     
     await client.connect();
@@ -36,8 +38,10 @@ app.get('/api/groups', async (req, res) => {
     const server = req.query.server || 'news.eternal-september.org';
     const port = parseInt(req.query.port) || 119;
     const ssl = req.query.ssl === 'true';
+    const username = req.query.username || null;
+    const password = req.query.password || null;
     
-    const client = await getConnection(server, port, ssl);
+    const client = await getConnection(server, port, ssl, username, password);
     const groups = await client.list();
     
     // Filter to text-only groups and format
@@ -63,9 +67,11 @@ app.get('/api/groups/:group/articles', async (req, res) => {
     const server = req.query.server || 'news.eternal-september.org';
     const port = parseInt(req.query.port) || 119;
     const ssl = req.query.ssl === 'true';
+    const username = req.query.username || null;
+    const password = req.query.password || null;
     const limit = parseInt(req.query.limit) || 20;
     
-    const client = await getConnection(server, port, ssl);
+    const client = await getConnection(server, port, ssl, username, password);
     
     // Select the group
     const info = await client.group(group);
@@ -98,11 +104,105 @@ app.get('/api/articles/:number', async (req, res) => {
     const server = req.query.server || 'news.eternal-september.org';
     const port = parseInt(req.query.port) || 119;
     const ssl = req.query.ssl === 'true';
+    const username = req.query.username || null;
+    const password = req.query.password || null;
     
-    const client = await getConnection(server, port, ssl);
+    const client = await getConnection(server, port, ssl, username, password);
     const body = await client.body(number);
     
     res.json({ body: body });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// API: Get full article (header + body)
+app.get('/api/articles/:number/full', async (req, res) => {
+  try {
+    const number = parseInt(req.params.number);
+    const server = req.query.server || 'news.eternal-september.org';
+    const port = parseInt(req.query.port) || 119;
+    const ssl = req.query.ssl === 'true';
+    const username = req.query.username || null;
+    const password = req.query.password || null;
+    
+    const client = await getConnection(server, port, ssl, username, password);
+    const article = await client.getArticle(number);
+    
+    res.json(article);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// API: Post a new article
+app.post('/api/post', async (req, res) => {
+  try {
+    const { server, port, ssl, username, password, group, subject, from, body } = req.body;
+    
+    if (!group || !subject || !from || !body) {
+      res.status(400).json({ error: 'Missing required fields: group, subject, from, body' });
+      return;
+    }
+    
+    const client = await getConnection(
+      server || 'news.eternal-september.org',
+      port || 119,
+      ssl || false,
+      username || null,
+      password || null
+    );
+    
+    await client.post(group, subject, from, body);
+    
+    res.json({ success: true, message: 'Article posted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// API: Reply to an article
+app.post('/api/reply', async (req, res) => {
+  try {
+    const { server, port, ssl, username, password, group, subject, from, body, replyTo } = req.body;
+    
+    if (!group || !subject || !from || !body || !replyTo) {
+      res.status(400).json({ error: 'Missing required fields: group, subject, from, body, replyTo' });
+      return;
+    }
+    
+    const client = await getConnection(
+      server || 'news.eternal-september.org',
+      port || 119,
+      ssl || false,
+      username || null,
+      password || null
+    );
+    
+    // Get the original article to extract message ID for References header
+    let references = replyTo;
+    try {
+      const article = await client.getArticle(replyTo);
+      if (article.header.messageId) {
+        references = article.header.messageId;
+        // If there's already a References header, append to it
+        if (article.body.includes('References:')) {
+          const refMatch = article.body.match(/References:\s*(.+)/i);
+          if (refMatch) {
+            references = `${refMatch[1]} ${article.header.messageId}`;
+          }
+        }
+      }
+    } catch (err) {
+      // If we can't get the article, just use the replyTo as reference
+    }
+    
+    // Add "Re: " prefix if not already present
+    const replySubject = subject.startsWith('Re:') ? subject : `Re: ${subject}`;
+    
+    await client.post(group, replySubject, from, body, references);
+    
+    res.json({ success: true, message: 'Reply posted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

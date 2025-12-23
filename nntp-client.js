@@ -6,6 +6,8 @@ class NNTPClient {
     this.host = options.host || 'news.eternal-september.org';
     this.port = options.port || 119;
     this.ssl = options.ssl || false;
+    this.username = options.username || null;
+    this.password = options.password || null;
     this.socket = null;
     this.connected = false;
     this.buffer = '';
@@ -39,17 +41,45 @@ class NNTPClient {
       });
 
       // Wait for server greeting
-      socket.once('data', (data) => {
+      socket.once('data', async (data) => {
         const greeting = data.toString().trim();
         const code = parseInt(greeting.substring(0, 3));
         if (code >= 200 && code < 400) {
           this.connected = true;
+          
+          // Authenticate if credentials provided
+          if (this.username && this.password) {
+            try {
+              await this.authenticate();
+            } catch (authErr) {
+              reject(new Error(`Authentication failed: ${authErr.message}`));
+              return;
+            }
+          }
+          
           resolve();
         } else {
           reject(new Error(`Server rejected connection: ${greeting.substring(4).trim()}`));
         }
       });
     });
+  }
+
+  async authenticate() {
+    // Send AUTHINFO USER
+    const userResponse = await this.sendCommand(`AUTHINFO USER ${this.username}`);
+    
+    // Check if password is needed (code 381)
+    if (userResponse.code === 381) {
+      // Send AUTHINFO PASS
+      const passResponse = await this.sendCommand(`AUTHINFO PASS ${this.password}`);
+      
+      if (passResponse.code !== 281) {
+        throw new Error('Authentication failed');
+      }
+    } else if (userResponse.code !== 281) {
+      throw new Error('Authentication failed');
+    }
   }
 
   setupSocket() {
@@ -207,6 +237,101 @@ class NNTPClient {
     }
     
     return headers;
+  }
+
+  async getArticle(articleNumber) {
+    // Get both header and body
+    const header = await this.head(articleNumber);
+    const body = await this.body(articleNumber);
+    return { header, body };
+  }
+
+  async post(groupName, subject, from, body, references = null) {
+    // Select the group first
+    await this.group(groupName);
+    
+    // Send POST command
+    const postResponse = await this.sendCommand('POST');
+    
+    if (postResponse.code !== 340) {
+      throw new Error('Server rejected POST command');
+    }
+    
+    // Build the article
+    const date = new Date().toUTCString();
+    let article = `From: ${from}\r\n`;
+    article += `Newsgroups: ${groupName}\r\n`;
+    article += `Subject: ${subject}\r\n`;
+    article += `Date: ${date}\r\n`;
+    
+    if (references) {
+      article += `References: ${references}\r\n`;
+    }
+    
+    article += `\r\n`;
+    
+    // Process body - escape lines starting with "." (NNTP requirement)
+    const bodyLines = body.split(/\r?\n/);
+    for (const line of bodyLines) {
+      if (line.startsWith('.')) {
+        article += '.' + line + '\r\n';
+      } else {
+        article += line + '\r\n';
+      }
+    }
+    
+    article += `.\r\n`;
+    
+    // Send the article
+    const response = await this.sendMultilineData(article);
+    
+    if (response.code !== 240) {
+      throw new Error('Article posting failed');
+    }
+    
+    return response;
+  }
+
+  sendMultilineData(data) {
+    return new Promise((resolve, reject) => {
+      if (!this.socket || !this.socket.writable) {
+        reject(new Error('Not connected'));
+        return;
+      }
+
+      let buffer = '';
+      const timeout = setTimeout(() => {
+        this.socket.removeListener('data', responseHandler);
+        reject(new Error('Command timeout'));
+      }, 60000);
+
+      const responseHandler = (data) => {
+        buffer += data.toString();
+        const lines = buffer.split(/\r?\n/);
+        
+        if (lines.length >= 1) {
+          clearTimeout(timeout);
+          this.socket.removeListener('data', responseHandler);
+          
+          const statusLine = lines[0];
+          const code = parseInt(statusLine.substring(0, 3));
+          const message = statusLine.substring(4).trim();
+          
+          if (code >= 200 && code < 400) {
+            resolve({
+              code,
+              message,
+              lines: []
+            });
+          } else {
+            reject(new Error(message || `NNTP error ${code}`));
+          }
+        }
+      };
+
+      this.socket.on('data', responseHandler);
+      this.socket.write(data);
+    });
   }
 
   disconnect() {

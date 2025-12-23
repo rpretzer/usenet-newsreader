@@ -1,11 +1,16 @@
 let currentServer = 'news.eternal-september.org';
 let currentPort = 119;
 let currentSsl = false;
+let currentUsername = '';
+let currentPassword = '';
 let currentGroup = null;
+let currentArticle = null;
 
 // DOM elements
 const serverInput = document.getElementById('server');
 const portInput = document.getElementById('port');
+const usernameInput = document.getElementById('username');
+const passwordInput = document.getElementById('password');
 const connectBtn = document.getElementById('connect');
 const groupsList = document.getElementById('groups-list');
 const articlesPanel = document.getElementById('articles-panel');
@@ -16,11 +21,31 @@ const currentGroupTitle = document.getElementById('current-group');
 const backBtn = document.getElementById('back-to-articles');
 const loading = document.getElementById('loading');
 const error = document.getElementById('error');
+const newPostBtn = document.getElementById('new-post-btn');
+const replyBtn = document.getElementById('reply-btn');
+const postModal = document.getElementById('post-modal');
+const closeModal = document.getElementById('close-modal');
+const cancelPost = document.getElementById('cancel-post');
+const submitPost = document.getElementById('submit-post');
+const modalTitle = document.getElementById('modal-title');
+const postFrom = document.getElementById('post-from');
+const postSubject = document.getElementById('post-subject');
+const postBody = document.getElementById('post-body');
+
+// Helper function to build query string with auth
+function buildQueryString(baseParams) {
+    const params = new URLSearchParams(baseParams);
+    if (currentUsername) params.append('username', currentUsername);
+    if (currentPassword) params.append('password', currentPassword);
+    return params.toString();
+}
 
 // Connect to server and load groups
 connectBtn.addEventListener('click', async () => {
     currentServer = serverInput.value.trim();
     currentPort = parseInt(portInput.value) || 119;
+    currentUsername = usernameInput.value.trim();
+    currentPassword = passwordInput.value.trim();
     
     if (!currentServer) {
         showError('Please enter a server address');
@@ -31,7 +56,12 @@ connectBtn.addEventListener('click', async () => {
     hideError();
     
     try {
-        const response = await fetch(`/api/groups?server=${encodeURIComponent(currentServer)}&port=${currentPort}&ssl=${currentSsl}`);
+        const query = buildQueryString({
+            server: currentServer,
+            port: currentPort,
+            ssl: currentSsl
+        });
+        const response = await fetch(`/api/groups?${query}`);
         
         if (!response.ok) {
             const data = await response.json();
@@ -88,7 +118,13 @@ async function loadArticles(groupName) {
     articlePanel.style.display = 'none';
     
     try {
-        const response = await fetch(`/api/groups/${encodeURIComponent(groupName)}/articles?server=${encodeURIComponent(currentServer)}&port=${currentPort}&ssl=${currentSsl}&limit=20`);
+        const query = buildQueryString({
+            server: currentServer,
+            port: currentPort,
+            ssl: currentSsl,
+            limit: 20
+        });
+        const response = await fetch(`/api/groups/${encodeURIComponent(groupName)}/articles?${query}`);
         
         if (!response.ok) {
             const data = await response.json();
@@ -140,7 +176,12 @@ async function loadArticle(articleNumber) {
     articlePanel.style.display = 'block';
     
     try {
-        const response = await fetch(`/api/articles/${articleNumber}?server=${encodeURIComponent(currentServer)}&port=${currentPort}&ssl=${currentSsl}`);
+        const query = buildQueryString({
+            server: currentServer,
+            port: currentPort,
+            ssl: currentSsl
+        });
+        const response = await fetch(`/api/articles/${articleNumber}?${query}`);
         
         if (!response.ok) {
             const data = await response.json();
@@ -156,6 +197,7 @@ async function loadArticle(articleNumber) {
         let subject = '';
         let from = '';
         let date = '';
+        let messageId = '';
         
         for (let i = 0; i < Math.min(20, lines.length); i++) {
             const line = lines[i];
@@ -165,8 +207,18 @@ async function loadArticle(articleNumber) {
                 from = line.substring(5).trim();
             } else if (line.startsWith('Date:')) {
                 date = line.substring(5).trim();
+            } else if (line.startsWith('Message-ID:') || line.startsWith('Message-Id:')) {
+                messageId = line.substring(11).trim();
             }
         }
+        
+        // Store current article info for replies
+        currentArticle = {
+            number: articleNumber,
+            subject: subject,
+            from: from,
+            messageId: messageId
+        };
         
         document.getElementById('article-subject').textContent = subject || 'No subject';
         document.getElementById('article-from').textContent = `From: ${from || 'unknown'}`;
@@ -183,6 +235,117 @@ async function loadArticle(articleNumber) {
 backBtn.addEventListener('click', () => {
     articlePanel.style.display = 'none';
     articlesPanel.style.display = 'block';
+});
+
+// New Post button
+newPostBtn.addEventListener('click', () => {
+    if (!currentGroup) {
+        showError('Please select a newsgroup first');
+        return;
+    }
+    
+    modalTitle.textContent = 'New Post';
+    postFrom.value = '';
+    postSubject.value = '';
+    postBody.value = '';
+    postModal.style.display = 'flex';
+    currentArticle = null;
+});
+
+// Reply button
+replyBtn.addEventListener('click', () => {
+    if (!currentGroup || !currentArticle) {
+        showError('No article selected');
+        return;
+    }
+    
+    modalTitle.textContent = 'Reply';
+    postFrom.value = '';
+    postSubject.value = currentArticle.subject.startsWith('Re:') 
+        ? currentArticle.subject 
+        : `Re: ${currentArticle.subject}`;
+    
+    // Quote the original message
+    const originalBody = document.getElementById('article-body').textContent;
+    const quotedBody = `\n\nOn ${document.getElementById('article-date').textContent.replace('Date: ', '')}, ${currentArticle.from} wrote:\n\n${originalBody.split('\n').map(line => '> ' + line).join('\n')}\n\n`;
+    postBody.value = quotedBody;
+    postModal.style.display = 'flex';
+});
+
+// Close modal
+closeModal.addEventListener('click', () => {
+    postModal.style.display = 'none';
+});
+
+cancelPost.addEventListener('click', () => {
+    postModal.style.display = 'none';
+});
+
+// Submit post/reply
+submitPost.addEventListener('click', async () => {
+    const from = postFrom.value.trim();
+    const subject = postSubject.value.trim();
+    const body = postBody.value.trim();
+    
+    if (!from || !subject || !body) {
+        showError('Please fill in all fields');
+        return;
+    }
+    
+    if (!currentGroup) {
+        showError('No newsgroup selected');
+        return;
+    }
+    
+    showLoading();
+    hideError();
+    
+    try {
+        const payload = {
+            server: currentServer,
+            port: currentPort,
+            ssl: currentSsl,
+            group: currentGroup,
+            subject: subject,
+            from: from,
+            body: body
+        };
+        
+        if (currentUsername) payload.username = currentUsername;
+        if (currentPassword) payload.password = currentPassword;
+        
+        let endpoint = '/api/post';
+        if (currentArticle) {
+            endpoint = '/api/reply';
+            payload.replyTo = currentArticle.number;
+        }
+        
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || 'Failed to post');
+        }
+        
+        const result = await response.json();
+        showError(`Success: ${result.message}`);
+        postModal.style.display = 'none';
+        
+        // Reload articles to show the new post
+        if (articlesPanel.style.display !== 'none') {
+            loadArticles(currentGroup);
+        }
+    } catch (err) {
+        showError(`Post failed: ${err.message}`);
+    } finally {
+        hideLoading();
+    }
 });
 
 // Utility functions

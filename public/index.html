@@ -13,6 +13,8 @@
             <div class="server-config">
                 <input type="text" id="server" placeholder="news.eternal-september.org" value="news.eternal-september.org">
                 <input type="number" id="port" placeholder="119" value="119" style="width: 80px;">
+                <input type="text" id="username" placeholder="Username (optional)" style="width: 150px;">
+                <input type="password" id="password" placeholder="Password (optional)" style="width: 150px;">
                 <button id="connect">Connect</button>
             </div>
         </header>
@@ -27,13 +29,19 @@
             
             <div class="content">
                 <div id="articles-panel" style="display: none;">
-                    <h2 id="current-group"></h2>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h2 id="current-group" style="margin: 0;"></h2>
+                        <button id="new-post-btn" class="post-btn">New Post</button>
+                    </div>
                     <div id="articles-list" class="articles-list"></div>
                 </div>
                 
                 <div id="article-panel" style="display: none;">
                     <div class="article-header">
-                        <button id="back-to-articles">← Back</button>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <button id="back-to-articles">← Back</button>
+                            <button id="reply-btn" class="post-btn">Reply</button>
+                        </div>
                         <h3 id="article-subject"></h3>
                         <div class="article-meta">
                             <span id="article-from"></span>
@@ -51,6 +59,34 @@
         
         <div id="loading" class="loading" style="display: none;">Loading...</div>
         <div id="error" class="error" style="display: none;"></div>
+        
+        <!-- Post/Reply Modal -->
+        <div id="post-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="modal-title">New Post</h2>
+                    <button id="close-modal" class="close-btn">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>From:</label>
+                        <input type="text" id="post-from" placeholder="your.email@example.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Subject:</label>
+                        <input type="text" id="post-subject" placeholder="Article subject" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Message:</label>
+                        <textarea id="post-body" rows="15" placeholder="Your message here..." required></textarea>
+                    </div>
+                    <div class="modal-actions">
+                        <button id="cancel-post" class="cancel-btn">Cancel</button>
+                        <button id="submit-post" class="submit-btn">Post</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
     
     <script src="app.js"></script>
