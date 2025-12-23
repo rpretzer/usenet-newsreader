@@ -396,6 +396,51 @@ backBtn.addEventListener('click', () => {
     articlesPanel.style.display = 'block';
 });
 
+// Infinite scroll: Load more articles when scrolling near bottom
+function checkScrollAndLoadMore() {
+    if (isLoadingMore || !hasMoreArticles || !currentGroup || articlesPanel.style.display === 'none') {
+        return;
+    }
+    
+    // Check if articles list has its own scroll
+    const hasScroll = articlesList.scrollHeight > articlesList.clientHeight;
+    
+    if (hasScroll) {
+        // Articles list has its own scroll
+        const scrollTop = articlesList.scrollTop;
+        const scrollHeight = articlesList.scrollHeight;
+        const clientHeight = articlesList.clientHeight;
+        
+        // Load more when within 300px of bottom
+        if (scrollHeight - scrollTop - clientHeight < 300) {
+            loadArticles(currentGroup, true); // append = true
+        }
+    } else {
+        // Window scroll - check if articles list is near bottom of viewport
+        const articlesListRect = articlesList.getBoundingClientRect();
+        const windowHeight = window.innerHeight;
+        
+        // If articles list bottom is near viewport bottom, load more
+        if (articlesListRect.bottom - windowHeight < 400) {
+            loadArticles(currentGroup, true); // append = true
+        }
+    }
+}
+
+// Listen to articles list scroll
+articlesList.addEventListener('scroll', () => {
+    checkScrollAndLoadMore();
+});
+
+// Also handle window scroll (for mobile and when list doesn't have its own scroll)
+let scrollTimeout;
+window.addEventListener('scroll', () => {
+    clearTimeout(scrollTimeout);
+    scrollTimeout = setTimeout(() => {
+        checkScrollAndLoadMore();
+    }, 150); // Debounce scroll events
+}, { passive: true });
+
 // New Post button
 newPostBtn.addEventListener('click', () => {
     if (!currentGroup) {
