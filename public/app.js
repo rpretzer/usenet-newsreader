@@ -541,9 +541,11 @@ submitPost.addEventListener('click', async () => {
         showError(`Success: ${result.message}`);
         postModal.style.display = 'none';
         
-        // Reload articles to show the new post
+        // Reload articles to show the new post (reset pagination)
         if (articlesPanel.style.display !== 'none') {
-            loadArticles(currentGroup);
+            articleOffset = 0;
+            hasMoreArticles = false;
+            loadArticles(currentGroup, false);
         }
     } catch (err) {
         showError(`Post failed: ${err.message}`);
