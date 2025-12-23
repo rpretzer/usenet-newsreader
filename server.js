@@ -6,20 +6,21 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // CORS configuration for GitHub Pages deployment
-const allowedOrigins = [
-  'https://usenet.rspmgmt.com',
-  'https://rpretzer.github.io',
-  'http://localhost:3000'
-];
-
+// Allow all origins for mobile browser compatibility
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin) || !origin) {
-    res.setHeader('Access-Control-Allow-Origin', origin || '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  
+  // Allow requests from any origin (for mobile browsers and different domains)
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
+  
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
   
   if (req.method === 'OPTIONS') {
     res.sendStatus(200);

@@ -91,18 +91,42 @@ connectBtn.addEventListener('click', async () => {
             port: currentPort,
             ssl: currentSsl
         });
-        const response = await fetch(buildApiUrl(`/api/groups?${query}`));
+        const apiUrl = buildApiUrl(`/api/groups?${query}`);
+        
+        const response = await fetch(apiUrl, {
+            method: 'GET',
+            mode: 'cors',
+            credentials: 'omit',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
         
         if (!response.ok) {
-            const data = await response.json();
-            throw new Error(data.error || 'Failed to connect');
+            let errorMessage = 'Failed to connect';
+            try {
+                const data = await response.json();
+                errorMessage = data.error || errorMessage;
+            } catch (e) {
+                errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            }
+            throw new Error(errorMessage);
         }
         
         const groups = await response.json();
         allGroups = groups; // Store all groups
         filterAndDisplayGroups();
     } catch (err) {
-        showError(`Connection failed: ${err.message}`);
+        // Provide more detailed error messages
+        let errorMsg = err.message;
+        if (err.message === 'Failed to fetch' || err.message.includes('load failed')) {
+            errorMsg = 'Network error: Cannot reach backend server. Check your internet connection and verify the API URL is correct.';
+        } else if (err.message.includes('CORS')) {
+            errorMsg = 'CORS error: Backend server is not allowing requests from this origin.';
+        }
+        showError(`Connection failed: ${errorMsg}`);
+        console.error('Connection error:', err);
+        console.error('API URL:', buildApiUrl('/api/groups'));
     } finally {
         hideLoading();
     }
