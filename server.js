@@ -367,6 +367,14 @@ app.post('/api/reply', async (req, res) => {
   }
 });
 
+// Serve Socket.io client if available (for pooled server compatibility)
+try {
+  const { Server } = require('socket.io');
+  // Socket.io will handle /socket.io/socket.io.js automatically
+} catch (e) {
+  // Socket.io not available, that's fine for REST-only server
+}
+
 // Serve main page
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

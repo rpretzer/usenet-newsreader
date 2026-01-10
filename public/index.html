@@ -2,98 +2,181 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <meta name="theme-color" content="#1a1a1a">
-    <meta name="mobile-web-app-capable" content="yes">
-    <title>Usenet Newsreader</title>
-    <link rel="stylesheet" href="style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0a0a0f">
+    <title>Usenet Newsreader - Sovereign Node</title>
+    <link rel="stylesheet" href="output.css">
     <script src="config.js"></script>
 </head>
-<body>
-    <div class="container">
-        <header>
-            <h1>Usenet Newsreader</h1>
-            <div class="server-config">
-                <input type="text" id="server" placeholder="news.eternal-september.org" value="news.eternal-september.org">
-                <input type="number" id="port" placeholder="119" value="119" style="width: 80px;">
-                <input type="text" id="username" placeholder="Username (optional)" style="width: 150px;">
-                <input type="password" id="password" placeholder="Password (optional)" style="width: 150px;">
-                <button id="connect">Connect</button>
-            </div>
-        </header>
-        
-        <div class="main-content">
-            <div class="sidebar">
-                <h2>Newsgroups</h2>
-                <input type="text" id="group-search" placeholder="Search groups..." class="group-search">
-                <div id="groups-list" class="groups-list">
-                    <p class="info">Connect to a server to load groups</p>
-                </div>
-            </div>
-            
-            <div class="content">
-                <div id="articles-panel" style="display: none;">
-                    <div class="articles-header">
-                        <h2 id="current-group" style="margin: 0;"></h2>
-                        <button id="new-post-btn" class="post-btn">New Post</button>
-                    </div>
-                    <div id="articles-list" class="articles-list"></div>
-                </div>
-                
-                <div id="article-panel" style="display: none;">
-                    <div class="article-header">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                            <button id="back-to-articles">← Back</button>
-                            <button id="reply-btn" class="post-btn">Reply</button>
-                        </div>
-                        <h3 id="article-subject"></h3>
-                        <div class="article-meta">
-                            <span id="article-from"></span>
-                            <span id="article-date"></span>
-                        </div>
-                    </div>
-                    <div id="article-body" class="article-body"></div>
-                </div>
-                
-                <div id="welcome" class="welcome">
-                    <p>Select a newsgroup to view articles</p>
-                </div>
+<body class="bg-sovereign-bg text-sovereign-text font-mono antialiased">
+    <!-- Connection Bar -->
+    <header class="border-b border-sovereign-border bg-sovereign-surface p-4">
+        <div class="max-w-[1920px] mx-auto flex flex-wrap items-center gap-3">
+            <h1 class="text-xl font-semibold text-sovereign-accent">Usenet Newsreader</h1>
+            <div class="flex flex-wrap items-center gap-2 flex-1">
+                <input 
+                    type="text" 
+                    id="server" 
+                    placeholder="news.eternal-september.org" 
+                    value="news.eternal-september.org"
+                    class="px-3 py-1.5 bg-sovereign-bg border border-sovereign-border rounded text-sm focus:outline-none focus:ring-2 focus:ring-sovereign-accent"
+                >
+                <input 
+                    type="number" 
+                    id="port" 
+                    placeholder="119" 
+                    value="119"
+                    class="w-20 px-3 py-1.5 bg-sovereign-bg border border-sovereign-border rounded text-sm focus:outline-none focus:ring-2 focus:ring-sovereign-accent"
+                >
+                <input 
+                    type="text" 
+                    id="username" 
+                    placeholder="Username (optional)"
+                    class="px-3 py-1.5 bg-sovereign-bg border border-sovereign-border rounded text-sm focus:outline-none focus:ring-2 focus:ring-sovereign-accent"
+                >
+                <input 
+                    type="password" 
+                    id="password" 
+                    placeholder="Password (optional)"
+                    class="px-3 py-1.5 bg-sovereign-bg border border-sovereign-border rounded text-sm focus:outline-none focus:ring-2 focus:ring-sovereign-accent"
+                >
+                <button 
+                    id="connect"
+                    class="px-4 py-1.5 bg-sovereign-accent hover:bg-sovereign-accent-hover text-white rounded text-sm font-medium transition-colors"
+                >
+                    Connect
+                </button>
             </div>
         </div>
-        
-        <div id="loading" class="loading" style="display: none;">Loading...</div>
-        <div id="error" class="error" style="display: none;"></div>
-        
-        <!-- Post/Reply Modal -->
-        <div id="post-modal" class="modal" style="display: none;">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h2 id="modal-title">New Post</h2>
-                    <button id="close-modal" class="close-btn">×</button>
+    </header>
+
+    <!-- Main 3-Pane Layout -->
+    <div class="flex h-[calc(100vh-73px)] max-w-[1920px] mx-auto">
+        <!-- Pane 1: Groups (Left) -->
+        <aside id="pane-groups" class="w-80 border-r border-sovereign-border bg-sovereign-surface flex flex-col">
+            <div class="p-3 border-b border-sovereign-border">
+                <h2 class="text-sm font-semibold mb-2">Newsgroups</h2>
+                <input 
+                    type="text" 
+                    id="group-search" 
+                    placeholder="Search groups..."
+                    class="w-full px-3 py-1.5 bg-sovereign-bg border border-sovereign-border rounded text-sm focus:outline-none focus:ring-2 focus:ring-sovereign-accent"
+                >
+            </div>
+            <div id="groups-list" class="flex-1 overflow-y-auto">
+                <p class="p-4 text-sovereign-text-muted text-sm">Connect to a server to load groups</p>
+            </div>
+        </aside>
+
+        <!-- Pane 2: Threaded Headers (Middle) -->
+        <section id="pane-threads" class="flex-1 border-r border-sovereign-border bg-sovereign-bg flex flex-col">
+            <div class="p-3 border-b border-sovereign-border bg-sovereign-surface">
+                <div class="flex items-center justify-between">
+                    <h2 id="current-group-title" class="text-sm font-semibold">Select a newsgroup</h2>
+                    <button 
+                        id="new-post-btn"
+                        class="px-3 py-1 bg-sovereign-accent hover:bg-sovereign-accent-hover text-white rounded text-xs font-medium transition-colors"
+                    >
+                        New Post
+                    </button>
                 </div>
-                <div class="modal-body">
-                    <div class="form-group">
-                        <label>From:</label>
-                        <input type="text" id="post-from" placeholder="your.email@example.com" required>
+                <div id="thread-stats" class="mt-2 text-xs text-sovereign-text-muted"></div>
+            </div>
+            <div id="threads-container" class="flex-1 overflow-hidden">
+                <div id="threads-list" class="h-full overflow-y-auto">
+                    <p class="p-4 text-sovereign-text-muted text-sm">No threads loaded</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Pane 3: Reader (Right) -->
+        <article id="pane-reader" class="w-[50%] bg-sovereign-surface flex flex-col">
+            <div class="p-3 border-b border-sovereign-border">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 id="article-subject" class="text-sm font-semibold flex-1">No article selected</h3>
+                    <button 
+                        id="reply-btn"
+                        class="px-3 py-1 bg-sovereign-accent hover:bg-sovereign-accent-hover text-white rounded text-xs font-medium transition-colors ml-2"
+                    >
+                        Reply
+                    </button>
+                </div>
+                <div class="text-xs text-sovereign-text-muted space-x-4">
+                    <span id="article-from">From: -</span>
+                    <span id="article-date">Date: -</span>
+                </div>
+            </div>
+            <div id="article-body" class="flex-1 overflow-y-auto p-4 text-sm leading-relaxed whitespace-pre-wrap">
+                <p class="text-sovereign-text-muted">Select a message to read</p>
+            </div>
+        </article>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div id="loading" class="hidden fixed top-4 right-4 bg-sovereign-surface border border-sovereign-border rounded px-4 py-2 text-sm">
+        Loading...
+    </div>
+
+    <!-- Error Message -->
+    <div id="error" class="hidden fixed top-4 right-4 bg-red-900/50 border border-red-700 rounded px-4 py-2 text-sm text-red-200"></div>
+
+    <!-- Post/Reply Modal -->
+    <div id="post-modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+        <div class="bg-sovereign-surface border border-sovereign-border rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div class="p-4 border-b border-sovereign-border flex items-center justify-between">
+                <h2 id="modal-title" class="text-lg font-semibold">New Post</h2>
+                <button id="close-modal" class="text-sovereign-text-muted hover:text-sovereign-text text-2xl">&times;</button>
+            </div>
+            <div class="p-4 flex-1 overflow-y-auto">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">From:</label>
+                        <input 
+                            type="text" 
+                            id="post-from" 
+                            placeholder="your.email@example.com"
+                            class="w-full px-3 py-2 bg-sovereign-bg border border-sovereign-border rounded text-sm focus:outline-none focus:ring-2 focus:ring-sovereign-accent"
+                        >
                     </div>
-                    <div class="form-group">
-                        <label>Subject:</label>
-                        <input type="text" id="post-subject" placeholder="Article subject" required>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Subject:</label>
+                        <input 
+                            type="text" 
+                            id="post-subject" 
+                            placeholder="Article subject"
+                            class="w-full px-3 py-2 bg-sovereign-bg border border-sovereign-border rounded text-sm focus:outline-none focus:ring-2 focus:ring-sovereign-accent"
+                        >
                     </div>
-                    <div class="form-group">
-                        <label>Message:</label>
-                        <textarea id="post-body" rows="15" placeholder="Your message here..." required></textarea>
-                    </div>
-                    <div class="modal-actions">
-                        <button id="cancel-post" class="cancel-btn">Cancel</button>
-                        <button id="submit-post" class="submit-btn">Post</button>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Message:</label>
+                        <textarea 
+                            id="post-body" 
+                            rows="15"
+                            placeholder="Your message here..."
+                            class="w-full px-3 py-2 bg-sovereign-bg border border-sovereign-border rounded text-sm focus:outline-none focus:ring-2 focus:ring-sovereign-accent font-mono"
+                        ></textarea>
                     </div>
                 </div>
+            </div>
+            <div class="p-4 border-t border-sovereign-border flex justify-end gap-2">
+                <button 
+                    id="cancel-post"
+                    class="px-4 py-2 bg-sovereign-bg hover:bg-sovereign-border border border-sovereign-border rounded text-sm transition-colors"
+                >
+                    Cancel
+                </button>
+                <button 
+                    id="submit-post"
+                    class="px-4 py-2 bg-sovereign-accent hover:bg-sovereign-accent-hover text-white rounded text-sm font-medium transition-colors"
+                >
+                    Post
+                </button>
             </div>
         </div>
     </div>
-    
-    <script src="app.js"></script>
+
+    <!-- Use REST API version (app-v2.js) for compatibility with current server -->
+    <!-- For WebSocket version, run: npm run start:pooled and use app-pooled.js -->
+    <script src="app-v2.js"></script>
 </body>
 </html>
-
