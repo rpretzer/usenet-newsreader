@@ -477,6 +477,292 @@ document.getElementById('submit-post').addEventListener('click', async () => {
   });
 });
 
+// ==================== KEYBOARD NAVIGATION (WebSocket) ====================
+let keyboardMode = false;
+let focusedGroupIndex = -1;
+let focusedThreadIndex = -1;
+
+document.addEventListener('keydown', (e) => {
+  const activeElement = document.activeElement;
+  const isInput = activeElement && (
+    activeElement.tagName === 'INPUT' || 
+    activeElement.tagName === 'TEXTAREA' ||
+    activeElement.isContentEditable
+  );
+  
+  if (isInput) {
+    if (e.key === 'Escape' && !postModal.classList.contains('hidden')) {
+      postModal.classList.add('hidden');
+      e.preventDefault();
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === '/')) {
+      e.preventDefault();
+      if (groupSearchInput) {
+        groupSearchInput.focus();
+        groupSearchInput.select();
+      }
+    }
+    return;
+  }
+  
+  keyboardMode = true;
+  handleKeyboardShortcuts(e);
+});
+
+document.addEventListener('mousedown', () => {
+  keyboardMode = false;
+  document.querySelectorAll('.group-item.focused, .thread-item.focused').forEach(el => {
+    el.classList.remove('focused');
+  });
+});
+
+function handleKeyboardShortcuts(e) {
+  // Global shortcuts
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault();
+    toggleKeyboardHelp();
+    return;
+  }
+  
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === '/')) {
+    e.preventDefault();
+    if (groupSearchInput) {
+      groupSearchInput.focus();
+      groupSearchInput.select();
+    }
+    return;
+  }
+  
+  if ((e.ctrlKey || e.metaKey) && e.key === 'n' && !e.shiftKey) {
+    e.preventDefault();
+    if (currentGroup && newPostBtn) {
+      newPostBtn.click();
+    }
+    return;
+  }
+  
+  // View-specific navigation - check which pane is visible
+  const articlePane = document.getElementById('pane-reader');
+  const threadsPane = document.getElementById('pane-threads');
+  
+  const currentView = articlePane && articlePane.style.display !== 'none' ? 'article' :
+                      threadsPane && threadsPane.style.display !== 'none' ? 'threads' : 
+                      'groups';
+  
+  if (currentView === 'groups') {
+    handleGroupsNav(e);
+  } else if (currentView === 'threads') {
+    handleThreadsNav(e);
+  } else if (currentView === 'article') {
+    handleArticleNav(e);
+  }
+}
+
+function handleGroupsNav(e) {
+  const items = Array.from(groupsList.querySelectorAll('.group-item'));
+  if (items.length === 0) return;
+  
+  switch (e.key) {
+    case 'ArrowDown':
+      e.preventDefault();
+      focusedGroupIndex = Math.min(focusedGroupIndex + 1, items.length - 1);
+      focusItem(groupsList, '.group-item', focusedGroupIndex);
+      break;
+    case 'ArrowUp':
+      e.preventDefault();
+      focusedGroupIndex = Math.max(focusedGroupIndex - 1, 0);
+      focusItem(groupsList, '.group-item', focusedGroupIndex);
+      break;
+    case 'Home':
+      e.preventDefault();
+      focusedGroupIndex = 0;
+      focusItem(groupsList, '.group-item', 0);
+      break;
+    case 'End':
+      e.preventDefault();
+      focusedGroupIndex = items.length - 1;
+      focusItem(groupsList, '.group-item', items.length - 1);
+      break;
+    case 'Enter':
+      e.preventDefault();
+      if (focusedGroupIndex >= 0 && focusedGroupIndex < items.length) {
+        items[focusedGroupIndex].click();
+      }
+      break;
+  }
+}
+
+function handleThreadsNav(e) {
+  const items = Array.from(threadsList.querySelectorAll('.thread-item'));
+  if (items.length === 0) return;
+  
+  switch (e.key) {
+    case 'ArrowDown':
+      e.preventDefault();
+      focusedThreadIndex = Math.min(focusedThreadIndex + 1, items.length - 1);
+      focusItem(threadsList, '.thread-item', focusedThreadIndex);
+      break;
+    case 'ArrowUp':
+      e.preventDefault();
+      focusedThreadIndex = Math.max(focusedThreadIndex - 1, 0);
+      focusItem(threadsList, '.thread-item', focusedThreadIndex);
+      break;
+    case 'Home':
+      e.preventDefault();
+      focusedThreadIndex = 0;
+      focusItem(threadsList, '.thread-item', 0);
+      break;
+    case 'End':
+      e.preventDefault();
+      focusedThreadIndex = items.length - 1;
+      focusItem(threadsList, '.thread-item', items.length - 1);
+      break;
+    case 'Enter':
+      e.preventDefault();
+      if (focusedThreadIndex >= 0 && focusedThreadIndex < items.length) {
+        const articleNum = parseInt(items[focusedThreadIndex].getAttribute('data-article-number'));
+        if (articleNum) loadArticle(articleNum);
+      }
+      break;
+    case 'Escape':
+      e.preventDefault();
+      if (currentGroup) {
+        const threadsPane = document.getElementById('pane-threads');
+        const groupsPane = document.getElementById('pane-groups');
+        if (threadsPane && groupsPane) {
+          threadsPane.style.display = 'none';
+          groupsPane.style.display = 'flex';
+        }
+      }
+      break;
+    case 'n':
+      if (!e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        if (currentGroup && newPostBtn) {
+          newPostBtn.click();
+        }
+      }
+      break;
+  }
+}
+
+function handleArticleNav(e) {
+  switch (e.key) {
+    case 'Escape':
+    case 'Backspace':
+      e.preventDefault();
+      const articlePane = document.getElementById('pane-reader');
+      const threadsPane = document.getElementById('pane-threads');
+      if (articlePane && threadsPane) {
+        articlePane.style.display = 'none';
+        threadsPane.style.display = 'flex';
+      }
+      break;
+    case 'ArrowLeft':
+      e.preventDefault();
+      navigateToAdjacentArticle(-1);
+      break;
+    case 'ArrowRight':
+      e.preventDefault();
+      navigateToAdjacentArticle(1);
+      break;
+    case 'r':
+      if (!e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        if (currentArticle && replyBtn) {
+          replyBtn.click();
+        }
+      }
+      break;
+  }
+}
+
+function focusItem(container, selector, index) {
+  const items = Array.from(container.querySelectorAll(selector));
+  items.forEach((item, i) => {
+    if (i === index) {
+      item.classList.add('focused');
+      item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else {
+      item.classList.remove('focused');
+    }
+  });
+}
+
+function navigateToAdjacentArticle(direction) {
+  const items = Array.from(threadsList.querySelectorAll('.thread-item'));
+  if (items.length === 0) return;
+  
+  let currentIndex = -1;
+  if (currentArticle) {
+    currentIndex = items.findIndex(item => 
+      parseInt(item.getAttribute('data-article-number')) === currentArticle.number
+    );
+  }
+  
+  if (currentIndex === -1) {
+    currentIndex = focusedThreadIndex >= 0 ? focusedThreadIndex : 0;
+  }
+  
+  const newIndex = currentIndex + direction;
+  if (newIndex >= 0 && newIndex < items.length) {
+    const articleNum = parseInt(items[newIndex].getAttribute('data-article-number'));
+    if (articleNum) loadArticle(articleNum);
+  }
+}
+
+// Keyboard shortcuts help
+let keyboardHelpVisible = false;
+function toggleKeyboardHelp() {
+  keyboardHelpVisible = !keyboardHelpVisible;
+  let helpDiv = document.getElementById('keyboard-help');
+  
+  if (!helpDiv) {
+    helpDiv = document.createElement('div');
+    helpDiv.id = 'keyboard-help';
+    helpDiv.className = 'keyboard-help';
+    helpDiv.innerHTML = `
+      <div class="keyboard-help-content">
+        <h3>Keyboard Shortcuts</h3>
+        <div class="shortcut-section">
+          <h4>Navigation</h4>
+          <div class="shortcut-list">
+            <div><kbd>↑</kbd><kbd>↓</kbd> Navigate items</div>
+            <div><kbd>Home</kbd> First item</div>
+            <div><kbd>End</kbd> Last item</div>
+            <div><kbd>Enter</kbd> Open/Select</div>
+            <div><kbd>Esc</kbd> Go back</div>
+            <div><kbd>←</kbd><kbd>→</kbd> Previous/Next article</div>
+          </div>
+        </div>
+        <div class="shortcut-section">
+          <h4>Actions</h4>
+          <div class="shortcut-list">
+            <div><kbd>Ctrl/Cmd</kbd>+<kbd>N</kbd> New post</div>
+            <div><kbd>R</kbd> Reply (in article view)</div>
+            <div><kbd>N</kbd> New post (in threads view)</div>
+            <div><kbd>Ctrl/Cmd</kbd>+<kbd>F</kbd> or <kbd>/</kbd> Search</div>
+          </div>
+        </div>
+        <div class="shortcut-section">
+          <h4>General</h4>
+          <div class="shortcut-list">
+            <div><kbd>Ctrl/Cmd</kbd>+<kbd>K</kbd> Toggle help</div>
+          </div>
+        </div>
+        <button id="close-keyboard-help" class="close-help-btn">Close</button>
+      </div>
+    `;
+    document.body.appendChild(helpDiv);
+    
+    document.getElementById('close-keyboard-help').addEventListener('click', () => {
+      toggleKeyboardHelp();
+    });
+  }
+  
+  helpDiv.style.display = keyboardHelpVisible ? 'flex' : 'none';
+}
+
 // Initialize socket on page load
 document.addEventListener('DOMContentLoaded', () => {
   initSocket();

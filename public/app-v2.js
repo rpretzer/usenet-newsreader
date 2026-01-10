@@ -255,21 +255,28 @@ function renderVirtualScroll() {
     // Re-attach event listeners
     threadsList.querySelectorAll('.thread-item').forEach((item, idx) => {
         const actualIndex = virtualScrollStartIndex + idx;
-        item.addEventListener('click', () => loadArticle(virtualScrollItems[actualIndex].number));
+        item.addEventListener('click', () => {
+            const articleNum = virtualScrollItems[actualIndex]?.number;
+            if (articleNum) {
+                loadArticle(articleNum);
+            }
+        });
         item.tabIndex = 0;
     });
 }
 
 function renderThreadItem(thread, index) {
-    const indent = thread.depth * 1.5;
+    const indent = (thread.depth || 0) * 1.5;
     const subject = escapeHtml(thread.subject || '(no subject)');
     const from = escapeHtml(thread.from || 'unknown');
     const date = thread.date ? new Date(thread.date).toLocaleDateString() : '';
+    const articleNumber = thread.number || thread.article_number || 0;
     
     return `
         <div 
             class="thread-item p-3 border-b border-sovereign-border hover:bg-sovereign-bg cursor-pointer transition-colors"
-            data-depth="${thread.depth}"
+            data-depth="${thread.depth || 0}"
+            data-article-number="${articleNumber}"
             style="padding-left: ${indent}rem;"
         >
             <div class="flex items-start justify-between">
@@ -291,6 +298,14 @@ async function loadArticle(articleNumber) {
     showLoading();
     currentArticle = { number: articleNumber };
     
+    // Show article pane and hide threads pane
+    const articlePane = document.getElementById('pane-reader');
+    const threadsPane = document.getElementById('pane-threads');
+    if (articlePane && threadsPane) {
+        threadsPane.style.display = 'none';
+        articlePane.style.display = 'flex';
+    }
+    
     try {
         const query = buildQueryString({
             server: currentServer,
@@ -307,32 +322,77 @@ async function loadArticle(articleNumber) {
         
         const data = await response.json();
         
-        // If body is null, it's being loaded in background (X-Cache: PARTIAL)
-        if (data.body === null) {
-            articleSubject.textContent = data.subject || 'Loading...';
-            articleFrom.textContent = `From: ${data.from || 'unknown'}`;
-            articleDate.textContent = `Date: ${data.date || 'unknown'}`;
-            articleBody.textContent = 'Loading article body...';
-            
-            // Poll for body (or could use WebSocket in future)
-            setTimeout(() => loadArticle(articleNumber), 1000);
-            return;
+        // Handle both old format { body } and new format { number, subject, from, date, body }
+        // Also handle article.header format from getArticle
+        let articleBodyText = data.body || '';
+        let articleSubjectText = data.subject || '';
+        let articleFromText = data.from || '';
+        let articleDateText = data.date || '';
+        let articleMessageId = data.messageId || '';
+        
+        // Handle article.header format (from getArticle method)
+        if (data.article && data.article.header) {
+            articleSubjectText = data.article.header.subject || '';
+            articleFromText = data.article.header.from || '';
+            articleDateText = data.article.header.date || '';
+            articleMessageId = data.article.header.messageId || '';
+            articleBodyText = data.article.body || data.body || '';
+        } else if (data.article && !data.article.header) {
+            // Handle article object without header
+            articleBodyText = data.article.body || data.body || '';
+            articleSubjectText = data.article.subject || data.subject || '';
+            articleFromText = data.article.from || data.from || '';
+            articleDateText = data.article.date || data.date || '';
+            articleMessageId = data.article.messageId || data.messageId || '';
         }
         
-        articleSubject.textContent = data.subject || 'No subject';
-        articleFrom.textContent = `From: ${data.from || 'unknown'}`;
-        articleDate.textContent = `Date: ${data.date || 'unknown'}`;
-        articleBody.textContent = data.body || '';
+        // If body is null or empty, it's being loaded in background (X-Cache: PARTIAL)
+        if (!articleBodyText || articleBodyText === null || articleBodyText === '') {
+            // Try to extract from body if it's just the raw body
+            if (data.body && typeof data.body === 'string' && data.body.length > 0) {
+                articleBodyText = data.body;
+                // Try to extract headers from body
+                const lines = data.body.split('\n');
+                for (let i = 0; i < Math.min(20, lines.length); i++) {
+                    const line = lines[i];
+                    if (line.startsWith('Subject:')) articleSubjectText = line.substring(8).trim();
+                    if (line.startsWith('From:')) articleFromText = line.substring(5).trim();
+                    if (line.startsWith('Date:')) articleDateText = line.substring(5).trim();
+                    if (line.startsWith('Message-ID:') || line.startsWith('Message-Id:')) {
+                        articleMessageId = line.substring(11).trim();
+                    }
+                }
+            } else {
+                // No body yet - show loading
+                articleSubject.textContent = articleSubjectText || 'Loading...';
+                articleFrom.textContent = `From: ${articleFromText || 'unknown'}`;
+                articleDate.textContent = `Date: ${articleDateText || 'unknown'}`;
+                articleBody.textContent = 'Loading article body...';
+                
+                // Poll for body (or could use WebSocket in future)
+                setTimeout(() => loadArticle(articleNumber), 1000);
+                return;
+            }
+        }
+        
+        articleSubject.textContent = articleSubjectText || 'No subject';
+        articleFrom.textContent = `From: ${articleFromText || 'unknown'}`;
+        articleDate.textContent = `Date: ${articleDateText || 'unknown'}`;
+        articleBody.textContent = articleBodyText || '';
         
         currentArticle = {
             number: articleNumber,
-            subject: data.subject,
-            from: data.from,
-            messageId: data.messageId
+            subject: articleSubjectText,
+            from: articleFromText,
+            messageId: articleMessageId
         };
         
     } catch (err) {
         showError(`Failed to load article: ${err.message}`);
+        console.error('Article loading error:', err);
+        if (articleBody) {
+            articleBody.textContent = `Error: ${err.message}`;
+        }
     } finally {
         hideLoading();
     }
@@ -424,14 +484,289 @@ document.getElementById('submit-post').addEventListener('click', async () => {
     }
 });
 
-// Keyboard navigation (simplified for now)
+// ==================== KEYBOARD NAVIGATION ====================
+let keyboardMode = false;
+let focusedGroupIndex = -1;
+let focusedThreadIndex = -1;
+
 document.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-        if (e.key === 'Escape' && postModal.classList.contains('hidden') === false) {
+    const activeElement = document.activeElement;
+    const isInput = activeElement && (
+        activeElement.tagName === 'INPUT' || 
+        activeElement.tagName === 'TEXTAREA' ||
+        activeElement.isContentEditable
+    );
+    
+    // Don't interfere with typing in inputs (except special keys)
+    if (isInput) {
+        if (e.key === 'Escape' && !postModal.classList.contains('hidden')) {
             postModal.classList.add('hidden');
+            e.preventDefault();
+        }
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === '/')) {
+            e.preventDefault();
+            if (groupSearchInput) {
+                groupSearchInput.focus();
+                groupSearchInput.select();
+            }
         }
         return;
     }
     
-    // Add keyboard shortcuts here as needed
+    keyboardMode = true;
+    handleKeyboardShortcuts(e);
 });
+
+document.addEventListener('mousedown', () => {
+    keyboardMode = false;
+    document.querySelectorAll('.group-item.focused, .thread-item.focused').forEach(el => {
+        el.classList.remove('focused');
+    });
+});
+
+function handleKeyboardShortcuts(e) {
+    // Global shortcuts
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        toggleKeyboardHelp();
+        return;
+    }
+    
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === '/')) {
+        e.preventDefault();
+        if (groupSearchInput) {
+            groupSearchInput.focus();
+            groupSearchInput.select();
+        }
+        return;
+    }
+    
+    if ((e.ctrlKey || e.metaKey) && e.key === 'n' && !e.shiftKey) {
+        e.preventDefault();
+        if (currentGroup && newPostBtn) {
+            newPostBtn.click();
+        }
+        return;
+    }
+    
+    // View-specific navigation - check which pane is visible
+    const threadsPane = document.getElementById('pane-threads');
+    const articlePane = document.getElementById('pane-reader');
+    
+    const currentView = articlePane && articlePane.style.display !== 'none' ? 'article' :
+                        threadsPane && threadsPane.style.display !== 'none' ? 'threads' : 
+                        'groups';
+    
+    if (currentView === 'groups') {
+        handleGroupsNav(e);
+    } else if (currentView === 'threads') {
+        handleThreadsNav(e);
+    } else if (currentView === 'article') {
+        handleArticleNav(e);
+    }
+}
+
+function handleGroupsNav(e) {
+    const items = Array.from(groupsList.querySelectorAll('.group-item'));
+    if (items.length === 0) return;
+    
+    switch (e.key) {
+        case 'ArrowDown':
+            e.preventDefault();
+            focusedGroupIndex = Math.min(focusedGroupIndex + 1, items.length - 1);
+            focusItem(groupsList, '.group-item', focusedGroupIndex);
+            break;
+        case 'ArrowUp':
+            e.preventDefault();
+            focusedGroupIndex = Math.max(focusedGroupIndex - 1, 0);
+            focusItem(groupsList, '.group-item', focusedGroupIndex);
+            break;
+        case 'Home':
+            e.preventDefault();
+            focusedGroupIndex = 0;
+            focusItem(groupsList, '.group-item', 0);
+            break;
+        case 'End':
+            e.preventDefault();
+            focusedGroupIndex = items.length - 1;
+            focusItem(groupsList, '.group-item', items.length - 1);
+            break;
+        case 'Enter':
+            e.preventDefault();
+            if (focusedGroupIndex >= 0 && focusedGroupIndex < items.length) {
+                items[focusedGroupIndex].click();
+            }
+            break;
+    }
+}
+
+function handleThreadsNav(e) {
+    const items = Array.from(threadsList.querySelectorAll('.thread-item'));
+    if (items.length === 0) return;
+    
+    switch (e.key) {
+        case 'ArrowDown':
+            e.preventDefault();
+            focusedThreadIndex = Math.min(focusedThreadIndex + 1, items.length - 1);
+            focusItem(threadsList, '.thread-item', focusedThreadIndex);
+            break;
+        case 'ArrowUp':
+            e.preventDefault();
+            focusedThreadIndex = Math.max(focusedThreadIndex - 1, 0);
+            focusItem(threadsList, '.thread-item', focusedThreadIndex);
+            break;
+        case 'Home':
+            e.preventDefault();
+            focusedThreadIndex = 0;
+            focusItem(threadsList, '.thread-item', 0);
+            break;
+        case 'End':
+            e.preventDefault();
+            focusedThreadIndex = items.length - 1;
+            focusItem(threadsList, '.thread-item', items.length - 1);
+            break;
+        case 'Enter':
+            e.preventDefault();
+            if (focusedThreadIndex >= 0 && focusedThreadIndex < items.length) {
+                const articleNum = parseInt(items[focusedThreadIndex].getAttribute('data-article-number'));
+                if (articleNum) loadArticle(articleNum);
+            }
+            break;
+        case 'Escape':
+            e.preventDefault();
+            if (currentGroup) {
+                // Go back to groups view
+                const threadsPane = document.getElementById('pane-threads');
+                if (threadsPane) {
+                    threadsPane.style.display = 'none';
+                }
+            }
+            break;
+        case 'n':
+            if (!e.ctrlKey && !e.metaKey) {
+                e.preventDefault();
+                if (currentGroup && newPostBtn) {
+                    newPostBtn.click();
+                }
+            }
+            break;
+    }
+}
+
+function handleArticleNav(e) {
+    switch (e.key) {
+        case 'Escape':
+        case 'Backspace':
+            e.preventDefault();
+            // Go back to threads view
+            const articlePane = document.getElementById('pane-reader');
+            const threadsPane = document.getElementById('pane-threads');
+            if (articlePane && threadsPane) {
+                articlePane.style.display = 'none';
+                threadsPane.style.display = 'block';
+            }
+            break;
+        case 'ArrowLeft':
+            e.preventDefault();
+            navigateToAdjacentArticle(-1);
+            break;
+        case 'ArrowRight':
+            e.preventDefault();
+            navigateToAdjacentArticle(1);
+            break;
+        case 'r':
+            if (!e.ctrlKey && !e.metaKey) {
+                e.preventDefault();
+                if (currentArticle && replyBtn) {
+                    replyBtn.click();
+                }
+            }
+            break;
+    }
+}
+
+function focusItem(container, selector, index) {
+    const items = Array.from(container.querySelectorAll(selector));
+    items.forEach((item, i) => {
+        if (i === index) {
+            item.classList.add('focused');
+            item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } else {
+            item.classList.remove('focused');
+        }
+    });
+}
+
+function navigateToAdjacentArticle(direction) {
+    const items = Array.from(threadsList.querySelectorAll('.thread-item'));
+    if (items.length === 0) return;
+    
+    let currentIndex = -1;
+    if (currentArticle) {
+        currentIndex = items.findIndex(item => 
+            parseInt(item.getAttribute('data-article-number')) === currentArticle.number
+        );
+    }
+    
+    if (currentIndex === -1) {
+        currentIndex = focusedThreadIndex >= 0 ? focusedThreadIndex : 0;
+    }
+    
+    const newIndex = currentIndex + direction;
+    if (newIndex >= 0 && newIndex < items.length) {
+        const articleNum = parseInt(items[newIndex].getAttribute('data-article-number'));
+        if (articleNum) loadArticle(articleNum);
+    }
+}
+
+// Keyboard shortcuts help
+let keyboardHelpVisible = false;
+function toggleKeyboardHelp() {
+    keyboardHelpVisible = !keyboardHelpVisible;
+    let helpDiv = document.getElementById('keyboard-help');
+    
+    if (!helpDiv) {
+        helpDiv = document.createElement('div');
+        helpDiv.id = 'keyboard-help';
+        helpDiv.className = 'keyboard-help';
+        helpDiv.innerHTML = `
+            <div class="keyboard-help-content">
+                <h3>Keyboard Shortcuts</h3>
+                <div class="shortcut-section">
+                    <h4>Navigation</h4>
+                    <div class="shortcut-list">
+                        <div><kbd>↑</kbd><kbd>↓</kbd> Navigate items</div>
+                        <div><kbd>Home</kbd> First item</div>
+                        <div><kbd>End</kbd> Last item</div>
+                        <div><kbd>Enter</kbd> Open/Select</div>
+                        <div><kbd>Esc</kbd> Go back</div>
+                        <div><kbd>←</kbd><kbd>→</kbd> Previous/Next article</div>
+                    </div>
+                </div>
+                <div class="shortcut-section">
+                    <h4>Actions</h4>
+                    <div class="shortcut-list">
+                        <div><kbd>Ctrl/Cmd</kbd>+<kbd>N</kbd> New post</div>
+                        <div><kbd>R</kbd> Reply (in article view)</div>
+                        <div><kbd>N</kbd> New post (in threads view)</div>
+                        <div><kbd>Ctrl/Cmd</kbd>+<kbd>F</kbd> or <kbd>/</kbd> Search</div>
+                    </div>
+                </div>
+                <div class="shortcut-section">
+                    <h4>General</h4>
+                    <div class="shortcut-list">
+                        <div><kbd>Ctrl/Cmd</kbd>+<kbd>K</kbd> Toggle help</div>
+                    </div>
+                </div>
+                <button id="close-keyboard-help" class="close-help-btn">Close</button>
+            </div>
+        `;
+        document.body.appendChild(helpDiv);
+        
+        document.getElementById('close-keyboard-help').addEventListener('click', () => {
+            toggleKeyboardHelp();
+        });
+    }
+    
+    helpDiv.style.display = keyboardHelpVisible ? 'flex' : 'none';
+}

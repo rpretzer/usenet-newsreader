@@ -472,23 +472,42 @@ async function loadArticle(articleNumber) {
         }
         
         const data = await response.json();
-        const article = data.article || data;
         
-        // Extract headers if body contains them
-        const body = article.body || '';
-        const lines = body.split('\n');
+        // Handle both old format { body } and new format { number, subject, from, date, body }
+        // Also handle article.header format from getArticle method
+        let body = data.body || '';
+        let subject = data.subject || '';
+        let from = data.from || '';
+        let date = data.date || '';
+        let messageId = data.messageId || '';
         
-        let subject = article.subject || '';
-        let from = article.from || '';
-        let date = article.date || '';
+        // Handle article.header format (from getArticle method)
+        if (data.article && data.article.header) {
+            subject = data.article.header.subject || '';
+            from = data.article.header.from || '';
+            date = data.article.header.date || '';
+            messageId = data.article.header.messageId || '';
+            body = data.article.body || data.body || '';
+        } else if (data.article && !data.article.header) {
+            // Handle article object without header
+            body = data.article.body || data.body || '';
+            subject = data.article.subject || data.subject || '';
+            from = data.article.from || data.from || '';
+            date = data.article.date || data.date || '';
+            messageId = data.article.messageId || data.messageId || '';
+        }
         
         // Try to extract from body if not in response
-        if (!subject || !from) {
+        if ((!subject || !from) && body) {
+            const lines = body.split('\n');
             for (let i = 0; i < Math.min(20, lines.length); i++) {
                 const line = lines[i];
                 if (line.startsWith('Subject:')) subject = line.substring(8).trim();
                 if (line.startsWith('From:')) from = line.substring(5).trim();
                 if (line.startsWith('Date:')) date = line.substring(5).trim();
+                if (line.startsWith('Message-ID:') || line.startsWith('Message-Id:')) {
+                    messageId = line.substring(11).trim();
+                }
             }
         }
         
@@ -502,10 +521,10 @@ async function loadArticle(articleNumber) {
         `;
         
         // Update body with word wrapping toggle
-        const bodyContent = body.replace(/\r\n/g, '\n');
+        const bodyContent = body ? body.replace(/\r\n/g, '\n') : '';
         articleBody.innerHTML = `
             <div class="mobile-article-content word-wrap">
-                <pre class="mobile-article-pre">${escapeHtml(bodyContent)}</pre>
+                <pre class="mobile-article-pre">${escapeHtml(bodyContent || 'No content')}</pre>
             </div>
             <div class="mobile-article-actions">
                 <button class="mobile-action-btn" onclick="toggleWordWrap()">
@@ -516,9 +535,10 @@ async function loadArticle(articleNumber) {
         
         currentArticle = {
             number: articleNumber,
-            subject,
-            from,
-            date,
+            subject: subject || '(no subject)',
+            from: from || 'unknown',
+            date: date || '',
+            messageId: messageId || '',
             body: bodyContent
         };
     } catch (err) {
@@ -612,5 +632,64 @@ window.addEventListener('popstate', (e) => {
         showPane(e.state.pane);
     } else {
         navigateBack();
+    }
+});
+
+// ==================== KEYBOARD NAVIGATION (Mobile) ====================
+document.addEventListener('keydown', (e) => {
+    const activeElement = document.activeElement;
+    const isInput = activeElement && (
+        activeElement.tagName === 'INPUT' || 
+        activeElement.tagName === 'TEXTAREA' ||
+        activeElement.isContentEditable
+    );
+    
+    if (isInput) {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            closeConnectionModal();
+        }
+        return;
+    }
+    
+    // Mobile keyboard shortcuts
+    switch (e.key) {
+        case 'Escape':
+        case 'Backspace':
+            e.preventDefault();
+            navigateBack();
+            break;
+        case 'ArrowLeft':
+            if (navigationState === 'article') {
+                e.preventDefault();
+                navigateBack();
+            }
+            break;
+        case 'ArrowRight':
+            if (navigationState === 'threads') {
+                e.preventDefault();
+                const focused = threadsList.querySelector('.mobile-thread-item:focus');
+                if (focused) {
+                    focused.click();
+                }
+            }
+            break;
+        case 'r':
+            if (!e.ctrlKey && !e.metaKey && navigationState === 'article' && currentArticle) {
+                e.preventDefault();
+                // TODO: Open reply modal
+            }
+            break;
+        case '/':
+        case 'f':
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                const searchInput = document.getElementById('mobile-group-search');
+                if (searchInput) {
+                    searchInput.focus();
+                    searchInput.select();
+                }
+            }
+            break;
     }
 });

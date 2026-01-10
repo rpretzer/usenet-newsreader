@@ -364,7 +364,112 @@ function displayArticles(articles, append = false) {
     }
 }
 
-// Load article body (uses cache - see lazy loading section below)
+// Load article body (with cache support)
+async function loadArticle(articleNumber, useCache = true) {
+    // Check cache first
+    if (useCache && articleBodyCache.has(articleNumber)) {
+        const cachedBody = articleBodyCache.get(articleNumber);
+        articlesPanel.style.display = 'none';
+        articlePanel.style.display = 'block';
+        currentView = 'article';
+        displayCachedArticle(articleNumber, cachedBody);
+        return;
+    }
+    
+    showLoading();
+    hideError();
+    articlesPanel.style.display = 'none';
+    articlePanel.style.display = 'block';
+    currentView = 'article';
+    
+    try {
+        const query = buildQueryString({
+            server: currentServer,
+            port: currentPort,
+            ssl: currentSsl,
+            group: currentGroup
+        });
+        const response = await fetch(buildApiUrl(`/api/articles/${articleNumber}?${query}`));
+        
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || 'Failed to load article');
+        }
+        
+        const data = await response.json();
+        
+        // Handle both old format { body } and new format { number, subject, from, date, body }
+        // Also handle article.header format from getArticle method
+        let body = data.body || '';
+        let subject = data.subject || '';
+        let from = data.from || '';
+        let date = data.date || '';
+        let messageId = data.messageId || '';
+        
+        // Handle article.header format (from getArticle method)
+        if (data.article && data.article.header) {
+            subject = data.article.header.subject || '';
+            from = data.article.header.from || '';
+            date = data.article.header.date || '';
+            messageId = data.article.header.messageId || '';
+            body = data.article.body || data.body || '';
+        } else if (data.article && !data.article.header) {
+            // Handle article object without header
+            body = data.article.body || data.body || '';
+            subject = data.article.subject || data.subject || '';
+            from = data.article.from || data.from || '';
+            date = data.article.date || data.date || '';
+            messageId = data.article.messageId || data.messageId || '';
+        }
+        
+        // If body exists but no headers, try to parse headers from body
+        if (body && (!subject || subject === '' || !from || from === '')) {
+            const lines = body.split('\n');
+            for (let i = 0; i < Math.min(20, lines.length); i++) {
+                const line = lines[i];
+                if (line.startsWith('Subject:')) {
+                    subject = line.substring(8).trim();
+                } else if (line.startsWith('From:')) {
+                    from = line.substring(5).trim();
+                } else if (line.startsWith('Date:')) {
+                    date = line.substring(5).trim();
+                } else if (line.startsWith('Message-ID:') || line.startsWith('Message-Id:')) {
+                    messageId = line.substring(11).trim();
+                }
+            }
+        }
+        
+        // Cache the article body
+        if (body && body !== '') {
+            cacheArticleBody(articleNumber, body);
+        }
+        
+        // Display article
+        currentArticle = {
+            number: articleNumber,
+            subject: subject || '(no subject)',
+            from: from || 'unknown',
+            date: date || '',
+            messageId: messageId
+        };
+        
+        const subjectEl = document.getElementById('article-subject');
+        const fromEl = document.getElementById('article-from');
+        const dateEl = document.getElementById('article-date');
+        const bodyEl = document.getElementById('article-body');
+        
+        if (subjectEl) subjectEl.textContent = subject || 'No subject';
+        if (fromEl) fromEl.textContent = `From: ${from || 'unknown'}`;
+        if (dateEl) dateEl.textContent = `Date: ${date || 'unknown'}`;
+        if (bodyEl) bodyEl.textContent = body || '';
+        
+    } catch (err) {
+        showError(`Failed to load article: ${err.message}`);
+        console.error('Article loading error:', err);
+    } finally {
+        hideLoading();
+    }
+}
 
 // Back button
 backBtn.addEventListener('click', () => {
@@ -855,8 +960,18 @@ async function prefetchArticleBody(articleNumber) {
         
         if (response.ok) {
             const data = await response.json();
-            // Cache the article body
-            cacheArticleBody(articleNumber, data.body);
+            // Handle both old format { body } and new format { number, subject, from, date, body }
+            // Also handle article.header format
+            let body = data.body || '';
+            if (data.article && data.article.header) {
+                body = data.article.body || data.body || '';
+            } else if (data.article && !data.article.header) {
+                body = data.article.body || data.body || '';
+            }
+            
+            if (body && body !== '') {
+                cacheArticleBody(articleNumber, body);
+            }
         }
     } catch (err) {
         // Silently fail prefetch
@@ -892,51 +1007,7 @@ function cacheArticleBody(articleNumber, body) {
     articleBodyCache.set(articleNumber, body);
 }
 
-// Load article with cache support
-async function loadArticle(articleNumber, useCache = true) {
-    // Check cache first
-    if (useCache && articleBodyCache.has(articleNumber)) {
-        const cachedBody = articleBodyCache.get(articleNumber);
-        articlesPanel.style.display = 'none';
-        articlePanel.style.display = 'block';
-        currentView = 'article';
-        displayCachedArticle(articleNumber, cachedBody);
-        return;
-    }
-    
-    showLoading();
-    hideError();
-    articlesPanel.style.display = 'none';
-    articlePanel.style.display = 'block';
-    currentView = 'article';
-    
-    try {
-        const query = buildQueryString({
-            server: currentServer,
-            port: currentPort,
-            ssl: currentSsl,
-            group: currentGroup
-        });
-        const response = await fetch(buildApiUrl(`/api/articles/${articleNumber}?${query}`));
-        
-        if (!response.ok) {
-            const data = await response.json();
-            throw new Error(data.error || 'Failed to load article');
-        }
-        
-        const data = await response.json();
-        const body = data.body;
-        
-        // Cache the article
-        cacheArticleBody(articleNumber, body);
-        
-        displayCachedArticle(articleNumber, body);
-    } catch (err) {
-        showError(`Failed to load article: ${err.message}`);
-    } finally {
-        hideLoading();
-    }
-}
+// Duplicate removed - using the one at line 368 instead
 
 // Display article from cache or fresh data
 function displayCachedArticle(articleNumber, body) {

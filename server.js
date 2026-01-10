@@ -267,9 +267,29 @@ app.get('/api/articles/:number', async (req, res) => {
       await client.group(group);
     }
     
-    const body = await client.body(number);
-    
-    res.json({ body: body });
+    // Get full article (header + body) for compatibility with new clients
+    try {
+      const article = await client.getArticle(number);
+      res.json({
+        number: number,
+        subject: article.header.subject || '(no subject)',
+        from: article.header.from || 'unknown',
+        date: article.header.date || '',
+        messageId: article.header.messageId || '',
+        body: article.body
+      });
+    } catch (err) {
+      // Fallback: just get body if getArticle fails
+      const body = await client.body(number);
+      res.json({ 
+        number: number,
+        subject: '(no subject)',
+        from: 'unknown',
+        date: '',
+        messageId: '',
+        body: body 
+      });
+    }
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
