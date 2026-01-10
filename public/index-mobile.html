@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="theme-color" content="#0a0a0f">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Usenet Newsreader - Mobile</title>
+    <link rel="stylesheet" href="output.css">
+    <link rel="stylesheet" href="mobile.css">
+    <script src="config.js"></script>
+</head>
+<body class="mobile-body bg-sovereign-bg text-sovereign-text">
+    <!-- Connection Modal (Bottom Sheet) -->
+    <div id="mobile-connection-modal" class="mobile-modal hidden">
+        <div class="mobile-modal-overlay" onclick="closeConnectionModal()"></div>
+        <div class="mobile-modal-content">
+            <div class="mobile-modal-header">
+                <h2 class="mobile-modal-title">Connect to Server</h2>
+                <button class="mobile-modal-close" onclick="closeConnectionModal()">×</button>
+            </div>
+            <div class="mobile-modal-body">
+                <div class="mobile-form-group">
+                    <label>Server</label>
+                    <input type="text" id="mobile-server" placeholder="news.eternal-september.org" value="news.eternal-september.org">
+                </div>
+                <div class="mobile-form-group">
+                    <label>Port</label>
+                    <input type="number" id="mobile-port" placeholder="119" value="119">
+                </div>
+                <div class="mobile-form-group">
+                    <label>Username (optional)</label>
+                    <input type="text" id="mobile-username" placeholder="Username">
+                </div>
+                <div class="mobile-form-group">
+                    <label>Password (optional)</label>
+                    <input type="password" id="mobile-password" placeholder="Password">
+                </div>
+                <button id="mobile-connect" class="mobile-btn-primary mobile-btn-full">Connect</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Stack Navigation: Level 1 - Groups -->
+    <div id="mobile-groups-pane" class="mobile-pane active">
+        <header class="mobile-header">
+            <h1 class="mobile-header-title">Newsgroups</h1>
+            <button class="mobile-header-btn" onclick="openConnectionModal()">⚙️</button>
+        </header>
+        <div id="mobile-groups-list" class="mobile-list">
+            <div class="p-4 text-center text-gray-500">Tap the settings button to connect</div>
+        </div>
+    </div>
+
+    <!-- Mobile Stack Navigation: Level 2 - Threads -->
+    <div id="mobile-threads-pane" class="mobile-pane">
+        <header class="mobile-header">
+            <button id="mobile-back-btn" class="mobile-back-btn hidden">←</button>
+            <h2 id="mobile-current-group" class="mobile-header-title">Threads</h2>
+            <button class="mobile-header-btn" onclick="refreshThreads()">↻</button>
+        </header>
+        <div id="pull-to-refresh" class="pull-to-refresh hidden">
+            <div class="pull-to-refresh-indicator">Pull to refresh</div>
+        </div>
+        <div id="mobile-threads-list" class="mobile-list">
+            <div class="p-4 text-center text-gray-500">Loading threads...</div>
+        </div>
+    </div>
+
+    <!-- Mobile Stack Navigation: Level 3 - Article -->
+    <div id="mobile-article-pane" class="mobile-pane">
+        <header class="mobile-header">
+            <button id="mobile-article-back-btn" class="mobile-back-btn">←</button>
+            <div id="mobile-article-header" class="mobile-article-header-content">
+                <div class="mobile-article-subject">No article selected</div>
+                <div class="mobile-article-meta">
+                    <span>From: -</span>
+                    <span>Date: -</span>
+                </div>
+            </div>
+            <button class="mobile-header-btn" onclick="shareArticle()">↗</button>
+        </header>
+        <div id="mobile-article-body" class="mobile-article-body">
+            <div class="p-4 text-center text-gray-500">Select an article to read</div>
+        </div>
+    </div>
+
+    <!-- Bottom Navigation Bar (Mobile Only) -->
+    <nav class="mobile-bottom-nav">
+        <button class="mobile-nav-item active" onclick="showPane('groups')">
+            <span class="mobile-nav-icon">📰</span>
+            <span class="mobile-nav-label">Groups</span>
+        </button>
+        <button class="mobile-nav-item" onclick="showPane('threads')">
+            <span class="mobile-nav-icon">🧵</span>
+            <span class="mobile-nav-label">Threads</span>
+        </button>
+        <button class="mobile-nav-item" onclick="showPane('article')">
+            <span class="mobile-nav-icon">📄</span>
+            <span class="mobile-nav-label">Article</span>
+        </button>
+        <button class="mobile-nav-item" onclick="openConnectionModal()">
+            <span class="mobile-nav-icon">⚙️</span>
+            <span class="mobile-nav-label">Settings</span>
+        </button>
+    </nav>
+
+    <!-- Loading Indicator -->
+    <div id="mobile-loading" class="mobile-loading hidden">
+        <div class="mobile-loading-spinner"></div>
+        <div class="mobile-loading-text">Loading...</div>
+    </div>
+
+    <!-- Error Message -->
+    <div id="mobile-error" class="mobile-error hidden"></div>
+
+    <!-- Toast Notification -->
+    <script>
+        function openConnectionModal() {
+            document.getElementById('mobile-connection-modal').classList.remove('hidden');
+        }
+        
+        function closeConnectionModal() {
+            document.getElementById('mobile-connection-modal').classList.add('hidden');
+        }
+        
+        function refreshThreads() {
+            if (window.refreshThreads) {
+                window.refreshThreads();
+            }
+        }
+        
+        function shareArticle() {
+            // TODO: Implement share functionality
+            alert('Share functionality coming soon');
+        }
+    </script>
+    
+    <script src="app-mobile.js"></script>
+</body>
+</html>

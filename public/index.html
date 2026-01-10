@@ -7,6 +7,19 @@
     <title>Usenet Newsreader - Sovereign Node</title>
     <link rel="stylesheet" href="output.css">
     <script src="config.js"></script>
+    <script>
+        // Detect mobile and redirect to mobile version
+        if (window.innerWidth < 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+            // Mobile detected - could redirect to mobile version or load mobile CSS
+            document.addEventListener('DOMContentLoaded', function() {
+                // Load mobile CSS
+                const link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = 'mobile.css';
+                document.head.appendChild(link);
+            });
+        }
+    </script>
 </head>
 <body class="bg-sovereign-bg text-sovereign-text font-mono antialiased">
     <!-- Connection Bar -->
