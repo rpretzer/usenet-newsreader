@@ -14,6 +14,17 @@ let hasMoreArticles = false; // Track if more articles are available
 let isLoadingMore = false; // Prevent multiple simultaneous loads
 let groupInfo = null; // Store group info (first, last, total)
 
+// Keyboard navigation state
+let focusedGroupIndex = -1;
+let focusedArticleIndex = -1;
+let keyboardMode = false; // Track if user is using keyboard navigation
+let currentView = 'groups'; // 'groups', 'articles', 'article', 'modal'
+
+// Lazy loading cache for article bodies
+const articleBodyCache = new Map();
+const articlePrefetchQueue = new Set();
+const MAX_CACHE_SIZE = 50; // Keep max 50 articles in cache
+
 // DOM elements
 const serverInput = document.getElementById('server');
 const portInput = document.getElementById('port');
@@ -188,7 +199,20 @@ function displayGroups(groups) {
             document.querySelectorAll('.group-item').forEach(i => i.classList.remove('active'));
             item.classList.add('active');
             
+            focusedGroupIndex = groups.indexOf(group);
+            resetNavigationState('articles');
             loadArticles(group.name);
+        });
+        
+        // Prefetch on hover
+        item.addEventListener('mouseenter', () => {
+            if (!keyboardMode) {
+                const index = groups.indexOf(group);
+                if (index >= 0) {
+                    focusedGroupIndex = index;
+                    updateGroupFocus();
+                }
+            }
         });
         
         groupsList.appendChild(item);
@@ -216,6 +240,7 @@ async function loadArticles(groupName, append = false) {
         welcome.style.display = 'none';
         articlesPanel.style.display = 'block';
         articlePanel.style.display = 'none';
+        resetNavigationState('articles');
     }
     
     if (isLoadingMore) {
@@ -308,6 +333,19 @@ function displayArticles(articles, append = false) {
             loadArticle(article.number);
         });
         
+        // Prefetch on hover
+        item.addEventListener('mouseenter', () => {
+            if (!keyboardMode) {
+                const index = Array.from(articlesList.querySelectorAll('.article-item')).indexOf(item);
+                if (index >= 0) {
+                    focusedArticleIndex = index;
+                    updateArticleFocus();
+                }
+                // Prefetch article body on hover
+                prefetchArticleBody(article.number);
+            }
+        });
+        
         articlesList.appendChild(item);
     });
     
@@ -326,75 +364,17 @@ function displayArticles(articles, append = false) {
     }
 }
 
-// Load article body
-async function loadArticle(articleNumber) {
-    showLoading();
-    hideError();
-    articlesPanel.style.display = 'none';
-    articlePanel.style.display = 'block';
-    
-    try {
-        const query = buildQueryString({
-            server: currentServer,
-            port: currentPort,
-            ssl: currentSsl,
-            group: currentGroup  // Include group name for article access
-        });
-        const response = await fetch(buildApiUrl(`/api/articles/${articleNumber}?${query}`));
-        
-        if (!response.ok) {
-            const data = await response.json();
-            throw new Error(data.error || 'Failed to load article');
-        }
-        
-        const data = await response.json();
-        
-        // Try to extract subject, from, date from the body if available
-        const body = data.body;
-        const lines = body.split('\n');
-        
-        let subject = '';
-        let from = '';
-        let date = '';
-        let messageId = '';
-        
-        for (let i = 0; i < Math.min(20, lines.length); i++) {
-            const line = lines[i];
-            if (line.startsWith('Subject:')) {
-                subject = line.substring(8).trim();
-            } else if (line.startsWith('From:')) {
-                from = line.substring(5).trim();
-            } else if (line.startsWith('Date:')) {
-                date = line.substring(5).trim();
-            } else if (line.startsWith('Message-ID:') || line.startsWith('Message-Id:')) {
-                messageId = line.substring(11).trim();
-            }
-        }
-        
-        // Store current article info for replies
-        currentArticle = {
-            number: articleNumber,
-            subject: subject,
-            from: from,
-            messageId: messageId
-        };
-        
-        document.getElementById('article-subject').textContent = subject || 'No subject';
-        document.getElementById('article-from').textContent = `From: ${from || 'unknown'}`;
-        document.getElementById('article-date').textContent = `Date: ${date || 'unknown'}`;
-        document.getElementById('article-body').textContent = body;
-    } catch (err) {
-        showError(`Failed to load article: ${err.message}`);
-    } finally {
-        hideLoading();
-    }
-}
+// Load article body (uses cache - see lazy loading section below)
 
 // Back button
 backBtn.addEventListener('click', () => {
     articlePanel.style.display = 'none';
     articlesPanel.style.display = 'block';
+    resetNavigationState('articles');
 });
+
+// Setup hover prefetch
+setupHoverPrefetch();
 
 // Infinite scroll: Load more articles when scrolling near bottom
 function checkScrollAndLoadMore() {
@@ -590,3 +570,455 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// ==================== KEYBOARD NAVIGATION ====================
+
+// Track keyboard vs mouse usage
+document.addEventListener('keydown', (e) => {
+    // Don't interfere with typing in inputs
+    const activeElement = document.activeElement;
+    if (activeElement && (
+        activeElement.tagName === 'INPUT' || 
+        activeElement.tagName === 'TEXTAREA' ||
+        activeElement.isContentEditable
+    )) {
+        // Handle special cases for inputs
+        if (e.key === 'Escape' && postModal.style.display === 'flex') {
+            postModal.style.display = 'none';
+            e.preventDefault();
+        }
+        return;
+    }
+    
+    keyboardMode = true;
+    handleKeyboardNavigation(e);
+});
+
+document.addEventListener('mousedown', () => {
+    keyboardMode = false;
+    // Remove focus from items when using mouse
+    document.querySelectorAll('.group-item.focused, .article-item.focused').forEach(el => {
+        el.classList.remove('focused');
+    });
+});
+
+// Main keyboard navigation handler
+function handleKeyboardNavigation(e) {
+    // Don't prevent default for modifier keys alone
+    if (e.ctrlKey || e.metaKey || e.altKey) {
+        // Handle shortcuts
+        if ((e.ctrlKey || e.metaKey) && e.key === 'n' && !e.shiftKey) {
+            e.preventDefault();
+            if (currentGroup) {
+                newPostBtn.click();
+            }
+            return;
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+            e.preventDefault();
+            if (currentArticle) {
+                replyBtn.click();
+            }
+            return;
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key === 'f' || e.key === '/') {
+            e.preventDefault();
+            if (currentView === 'groups') {
+                groupSearchInput.focus();
+                groupSearchInput.select();
+            }
+            return;
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault();
+            toggleKeyboardHelp();
+            return;
+        }
+        return;
+    }
+    
+    switch (currentView) {
+        case 'groups':
+            handleGroupsNavigation(e);
+            break;
+        case 'articles':
+            handleArticlesNavigation(e);
+            break;
+        case 'article':
+            handleArticleViewNavigation(e);
+            break;
+    }
+}
+
+// Navigate groups with arrow keys
+function handleGroupsNavigation(e) {
+    const groupItems = Array.from(groupsList.querySelectorAll('.group-item'));
+    if (groupItems.length === 0) return;
+    
+    switch (e.key) {
+        case 'ArrowDown':
+            e.preventDefault();
+            focusedGroupIndex = Math.min(focusedGroupIndex + 1, groupItems.length - 1);
+            updateGroupFocus();
+            break;
+        case 'ArrowUp':
+            e.preventDefault();
+            focusedGroupIndex = Math.max(focusedGroupIndex - 1, 0);
+            updateGroupFocus();
+            break;
+        case 'Home':
+            e.preventDefault();
+            focusedGroupIndex = 0;
+            updateGroupFocus();
+            break;
+        case 'End':
+            e.preventDefault();
+            focusedGroupIndex = groupItems.length - 1;
+            updateGroupFocus();
+            break;
+        case 'Enter':
+            e.preventDefault();
+            if (focusedGroupIndex >= 0 && focusedGroupIndex < groupItems.length) {
+                groupItems[focusedGroupIndex].click();
+            }
+            break;
+    }
+}
+
+function updateGroupFocus() {
+    const groupItems = Array.from(groupsList.querySelectorAll('.group-item'));
+    groupItems.forEach((item, index) => {
+        if (index === focusedGroupIndex) {
+            item.classList.add('focused');
+            item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } else {
+            item.classList.remove('focused');
+        }
+    });
+}
+
+// Navigate articles with arrow keys
+function handleArticlesNavigation(e) {
+    const articleItems = Array.from(articlesList.querySelectorAll('.article-item'));
+    if (articleItems.length === 0) return;
+    
+    switch (e.key) {
+        case 'ArrowDown':
+            e.preventDefault();
+            focusedArticleIndex = Math.min(focusedArticleIndex + 1, articleItems.length - 1);
+            updateArticleFocus();
+            // Prefetch next articles when near bottom
+            if (focusedArticleIndex >= articleItems.length - 3 && hasMoreArticles) {
+                prefetchNearbyArticles(focusedArticleIndex);
+            }
+            break;
+        case 'ArrowUp':
+            e.preventDefault();
+            focusedArticleIndex = Math.max(focusedArticleIndex - 1, 0);
+            updateArticleFocus();
+            break;
+        case 'Home':
+            e.preventDefault();
+            focusedArticleIndex = 0;
+            updateArticleFocus();
+            break;
+        case 'End':
+            e.preventDefault();
+            focusedArticleIndex = articleItems.length - 1;
+            updateArticleFocus();
+            // Load more if at end
+            if (hasMoreArticles && !isLoadingMore) {
+                loadArticles(currentGroup, true);
+            }
+            break;
+        case 'Enter':
+            e.preventDefault();
+            if (focusedArticleIndex >= 0 && focusedArticleIndex < articleItems.length) {
+                const articleNumber = articleItems[focusedArticleIndex].getAttribute('data-article-number');
+                loadArticle(parseInt(articleNumber));
+            }
+            break;
+        case 'Escape':
+            e.preventDefault();
+            if (currentGroup) {
+                // Go back to groups view
+                articlesPanel.style.display = 'none';
+                welcome.style.display = 'block';
+                currentView = 'groups';
+                focusedArticleIndex = -1;
+            }
+            break;
+    }
+}
+
+function updateArticleFocus() {
+    const articleItems = Array.from(articlesList.querySelectorAll('.article-item'));
+    articleItems.forEach((item, index) => {
+        if (index === focusedArticleIndex) {
+            item.classList.add('focused');
+            item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } else {
+            item.classList.remove('focused');
+        }
+    });
+}
+
+// Navigate article view
+function handleArticleViewNavigation(e) {
+    switch (e.key) {
+        case 'Escape':
+        case 'Backspace':
+            e.preventDefault();
+            backBtn.click();
+            break;
+        case 'ArrowLeft':
+            e.preventDefault();
+            // Go to previous article if available
+            navigateToAdjacentArticle(-1);
+            break;
+        case 'ArrowRight':
+            e.preventDefault();
+            // Go to next article if available
+            navigateToAdjacentArticle(1);
+            break;
+        case 'r':
+            if (!e.ctrlKey && !e.metaKey) {
+                e.preventDefault();
+                if (currentArticle) {
+                    replyBtn.click();
+                }
+            }
+            break;
+    }
+}
+
+function navigateToAdjacentArticle(direction) {
+    const articleItems = Array.from(articlesList.querySelectorAll('.article-item'));
+    if (articleItems.length === 0) return;
+    
+    // Find current article index
+    let currentIndex = -1;
+    if (currentArticle) {
+        currentIndex = articleItems.findIndex(item => 
+            parseInt(item.getAttribute('data-article-number')) === currentArticle.number
+        );
+    }
+    
+    if (currentIndex === -1) {
+        currentIndex = focusedArticleIndex >= 0 ? focusedArticleIndex : 0;
+    }
+    
+    const newIndex = currentIndex + direction;
+    if (newIndex >= 0 && newIndex < articleItems.length) {
+        const articleNumber = articleItems[newIndex].getAttribute('data-article-number');
+        loadArticle(parseInt(articleNumber));
+    } else if (newIndex >= articleItems.length && hasMoreArticles && !isLoadingMore) {
+        // Load more and then navigate
+        loadArticles(currentGroup, true).then(() => {
+            setTimeout(() => navigateToAdjacentArticle(direction), 100);
+        });
+    }
+}
+
+// Reset navigation state when view changes
+function resetNavigationState(view) {
+    currentView = view;
+    if (view === 'groups') {
+        focusedGroupIndex = -1;
+        focusedArticleIndex = -1;
+    } else if (view === 'articles') {
+        focusedArticleIndex = -1;
+    }
+}
+
+// ==================== LAZY LOADING ====================
+
+// Prefetch article body when item is focused or hovered
+async function prefetchArticleBody(articleNumber) {
+    if (articleBodyCache.has(articleNumber)) {
+        return; // Already cached
+    }
+    
+    if (articlePrefetchQueue.has(articleNumber)) {
+        return; // Already in queue
+    }
+    
+    articlePrefetchQueue.add(articleNumber);
+    
+    try {
+        const query = buildQueryString({
+            server: currentServer,
+            port: currentPort,
+            ssl: currentSsl,
+            group: currentGroup
+        });
+        const response = await fetch(buildApiUrl(`/api/articles/${articleNumber}?${query}`));
+        
+        if (response.ok) {
+            const data = await response.json();
+            // Cache the article body
+            cacheArticleBody(articleNumber, data.body);
+        }
+    } catch (err) {
+        // Silently fail prefetch
+        console.debug('Prefetch failed for article', articleNumber);
+    } finally {
+        articlePrefetchQueue.delete(articleNumber);
+    }
+}
+
+// Prefetch articles near the focused one
+function prefetchNearbyArticles(index) {
+    const articleItems = Array.from(articlesList.querySelectorAll('.article-item'));
+    const prefetchRange = 3; // Prefetch 3 articles ahead and behind
+    
+    for (let i = Math.max(0, index - prefetchRange); 
+         i <= Math.min(articleItems.length - 1, index + prefetchRange); 
+         i++) {
+        const articleNumber = parseInt(articleItems[i].getAttribute('data-article-number'));
+        if (articleNumber && !articleBodyCache.has(articleNumber)) {
+            prefetchArticleBody(articleNumber);
+        }
+    }
+}
+
+// Cache article body with size limit
+function cacheArticleBody(articleNumber, body) {
+    // Remove oldest entries if cache is full
+    if (articleBodyCache.size >= MAX_CACHE_SIZE) {
+        const firstKey = articleBodyCache.keys().next().value;
+        articleBodyCache.delete(firstKey);
+    }
+    
+    articleBodyCache.set(articleNumber, body);
+}
+
+// Load article with cache support
+async function loadArticle(articleNumber, useCache = true) {
+    // Check cache first
+    if (useCache && articleBodyCache.has(articleNumber)) {
+        const cachedBody = articleBodyCache.get(articleNumber);
+        articlesPanel.style.display = 'none';
+        articlePanel.style.display = 'block';
+        currentView = 'article';
+        displayCachedArticle(articleNumber, cachedBody);
+        return;
+    }
+    
+    showLoading();
+    hideError();
+    articlesPanel.style.display = 'none';
+    articlePanel.style.display = 'block';
+    currentView = 'article';
+    
+    try {
+        const query = buildQueryString({
+            server: currentServer,
+            port: currentPort,
+            ssl: currentSsl,
+            group: currentGroup
+        });
+        const response = await fetch(buildApiUrl(`/api/articles/${articleNumber}?${query}`));
+        
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || 'Failed to load article');
+        }
+        
+        const data = await response.json();
+        const body = data.body;
+        
+        // Cache the article
+        cacheArticleBody(articleNumber, body);
+        
+        displayCachedArticle(articleNumber, body);
+    } catch (err) {
+        showError(`Failed to load article: ${err.message}`);
+    } finally {
+        hideLoading();
+    }
+}
+
+// Display article from cache or fresh data
+function displayCachedArticle(articleNumber, body) {
+    const lines = body.split('\n');
+    
+    let subject = '';
+    let from = '';
+    let date = '';
+    let messageId = '';
+    
+    for (let i = 0; i < Math.min(20, lines.length); i++) {
+        const line = lines[i];
+        if (line.startsWith('Subject:')) {
+            subject = line.substring(8).trim();
+        } else if (line.startsWith('From:')) {
+            from = line.substring(5).trim();
+        } else if (line.startsWith('Date:')) {
+            date = line.substring(5).trim();
+        } else if (line.startsWith('Message-ID:') || line.startsWith('Message-Id:')) {
+            messageId = line.substring(11).trim();
+        }
+    }
+    
+    // Store current article info for replies
+    currentArticle = {
+        number: articleNumber,
+        subject: subject,
+        from: from,
+        messageId: messageId
+    };
+    
+    document.getElementById('article-subject').textContent = subject || 'No subject';
+    document.getElementById('article-from').textContent = `From: ${from || 'unknown'}`;
+    document.getElementById('article-date').textContent = `Date: ${date || 'unknown'}`;
+    document.getElementById('article-body').textContent = body;
+}
+
+// Prefetch on hover (for mouse users)
+function setupHoverPrefetch() {
+    articlesList.addEventListener('mouseenter', (e) => {
+        const articleItem = e.target.closest('.article-item');
+        if (articleItem) {
+            const articleNumber = parseInt(articleItem.getAttribute('data-article-number'));
+            if (articleNumber) {
+                prefetchArticleBody(articleNumber);
+            }
+        }
+    }, true);
+}
+
+// Keyboard shortcuts help
+let keyboardHelpVisible = false;
+function toggleKeyboardHelp() {
+    keyboardHelpVisible = !keyboardHelpVisible;
+    let helpDiv = document.getElementById('keyboard-help');
+    
+    if (!helpDiv) {
+        helpDiv = document.createElement('div');
+        helpDiv.id = 'keyboard-help';
+        helpDiv.className = 'keyboard-help';
+        helpDiv.innerHTML = `
+            <div class="keyboard-help-content">
+                <h3>Keyboard Shortcuts</h3>
+                <div class="shortcut-list">
+                    <div><kbd>↑</kbd><kbd>↓</kbd> Navigate items</div>
+                    <div><kbd>Enter</kbd> Open/Select</div>
+                    <div><kbd>Esc</kbd> Go back</div>
+                    <div><kbd>←</kbd><kbd>→</kbd> Previous/Next article (in article view)</div>
+                    <div><kbd>Ctrl/Cmd</kbd>+<kbd>N</kbd> New post</div>
+                    <div><kbd>Ctrl/Cmd</kbd>+<kbd>R</kbd> Reply</div>
+                    <div><kbd>Ctrl/Cmd</kbd>+<kbd>F</kbd> or <kbd>/</kbd> Search groups</div>
+                    <div><kbd>Ctrl/Cmd</kbd>+<kbd>K</kbd> Toggle this help</div>
+                </div>
+                <button id="close-keyboard-help" class="close-help-btn">Close</button>
+            </div>
+        `;
+        document.body.appendChild(helpDiv);
+        
+        document.getElementById('close-keyboard-help').addEventListener('click', () => {
+            toggleKeyboardHelp();
+        });
+    }
+    
+    helpDiv.style.display = keyboardHelpVisible ? 'flex' : 'none';
+}

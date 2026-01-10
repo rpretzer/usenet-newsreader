@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+/* Custom scrollbar for Sovereign Node aesthetic */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #1a1a24;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #2a2a3a;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #3a3a4a;
+}
+
+/* Focus styles for keyboard navigation */
+.group-item:focus,
+.thread-item:focus {
+    outline: 2px solid #4f9cf9;
+    outline-offset: -2px;
+}
+
+/* Thread indentation */
+.thread-item {
+    padding-left: calc(var(--depth) * 1.5rem);
+    border-left: 2px solid transparent;
+}
+
+.thread-item[data-depth="0"] {
+    border-left-color: #4f9cf9;
+}
+
+.thread-item[data-depth="1"] {
+    border-left-color: #6bb0ff;
+}
+
+.thread-item[data-depth="2"] {
+    border-left-color: #87c4ff;
+}
+
+/* Virtual scrolling container */
+.virtual-scroll-container {
+    will-change: transform;
+}
+
+/* Smooth transitions */
+.transition-all {
+    transition-property: all;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+}
