@@ -553,8 +553,7 @@ if (articleBackButton) {
     articleBackButton.addEventListener('click', navigateBack);
 }
 
-// Expose refreshThreads globally
-window.refreshThreads = refreshThreads;
+// Already exposed above (line 302)
 
 // Utility functions
 function showLoading() {
