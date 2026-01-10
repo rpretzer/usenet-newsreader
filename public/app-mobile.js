@@ -298,9 +298,193 @@ async function refreshThreads() {
     hideLoading();
 }
 
+// Share functionality using Web Share API
+function shareArticle() {
+    if (!currentArticle) {
+        showToast('No article selected');
+        return;
+    }
+    
+    const shareData = {
+        title: currentArticle.subject || 'Usenet Article',
+        text: `${currentArticle.subject || 'Article'}\nFrom: ${currentArticle.from || 'unknown'}\n\nRead on Usenet Newsreader`,
+        url: window.location.href
+    };
+    
+    // Use Web Share API if available (mobile browsers)
+    if (navigator.share) {
+        navigator.share(shareData)
+            .then(() => {
+                showToast('Shared successfully');
+            })
+            .catch((err) => {
+                if (err.name !== 'AbortError') {
+                    console.error('Share error:', err);
+                    fallbackShare(shareData);
+                }
+            });
+    } else {
+        // Fallback: copy to clipboard
+        fallbackShare(shareData);
+    }
+}
+
+function fallbackShare(shareData) {
+    const shareText = `${shareData.title}\n${shareData.text}\n${shareData.url}`;
+    
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(shareText)
+            .then(() => {
+                showToast('Link copied to clipboard');
+            })
+            .catch((err) => {
+                console.error('Clipboard error:', err);
+                prompt('Copy this link:', shareText);
+            });
+    } else {
+        // Final fallback: prompt
+        prompt('Copy this link:', shareText);
+    }
+}
+
+// Reply modal functionality
+function openReplyModal() {
+    if (!currentArticle || !currentGroup) {
+        showToast('No article selected');
+        return;
+    }
+    
+    // Create reply modal if it doesn't exist
+    let replyModal = document.getElementById('mobile-reply-modal');
+    if (!replyModal) {
+        replyModal = document.createElement('div');
+        replyModal.id = 'mobile-reply-modal';
+        replyModal.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4';
+        replyModal.innerHTML = `
+            <div class="bg-sovereign-surface rounded-lg p-4 w-full max-w-md max-h-[90vh] overflow-y-auto">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold">Reply to Article</h3>
+                    <button id="close-reply-modal" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm mb-1">From:</label>
+                        <input type="text" id="reply-from" class="w-full px-3 py-2 bg-sovereign-bg border border-sovereign-border rounded text-sm" placeholder="Your email">
+                    </div>
+                    <div>
+                        <label class="block text-sm mb-1">Subject:</label>
+                        <input type="text" id="reply-subject" class="w-full px-3 py-2 bg-sovereign-bg border border-sovereign-border rounded text-sm" value="Re: ${currentArticle.subject || ''}">
+                    </div>
+                    <div>
+                        <label class="block text-sm mb-1">Message:</label>
+                        <textarea id="reply-body" rows="10" class="w-full px-3 py-2 bg-sovereign-bg border border-sovereign-border rounded text-sm" placeholder="Type your reply..."></textarea>
+                    </div>
+                    <div class="flex gap-2">
+                        <button id="submit-reply" class="flex-1 px-4 py-2 bg-sovereign-accent hover:bg-sovereign-accent-hover text-white rounded text-sm font-medium">Send Reply</button>
+                        <button id="cancel-reply" class="px-4 py-2 bg-sovereign-border hover:bg-sovereign-bg text-white rounded text-sm">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(replyModal);
+        
+        // Event listeners
+        document.getElementById('close-reply-modal').addEventListener('click', closeReplyModal);
+        document.getElementById('cancel-reply').addEventListener('click', closeReplyModal);
+        document.getElementById('submit-reply').addEventListener('click', submitReply);
+        
+        // Close on background click
+        replyModal.addEventListener('click', (e) => {
+            if (e.target === replyModal) {
+                closeReplyModal();
+            }
+        });
+    }
+    
+    // Update subject and pre-fill reply body with quote
+    const subjectInput = document.getElementById('reply-subject');
+    const bodyTextarea = document.getElementById('reply-body');
+    
+    if (subjectInput) {
+        subjectInput.value = `Re: ${currentArticle.subject || ''}`;
+    }
+    
+    if (bodyTextarea && currentArticle.body) {
+        const quotedBody = currentArticle.body.split('\n').map(line => `> ${line}`).join('\n');
+        bodyTextarea.value = `\n\n${quotedBody}`;
+    }
+    
+    replyModal.classList.remove('hidden');
+}
+
+function closeReplyModal() {
+    const replyModal = document.getElementById('mobile-reply-modal');
+    if (replyModal) {
+        replyModal.classList.add('hidden');
+    }
+}
+
+async function submitReply() {
+    const from = document.getElementById('reply-from')?.value.trim();
+    const subject = document.getElementById('reply-subject')?.value.trim();
+    const body = document.getElementById('reply-body')?.value.trim();
+    
+    if (!from || !subject || !body) {
+        showToast('Please fill in all fields');
+        return;
+    }
+    
+    if (!currentGroup || !currentArticle) {
+        showToast('No article selected');
+        return;
+    }
+    
+    showLoading();
+    
+    try {
+        const response = await fetch(buildApiUrl('/api/reply'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                server: currentServer,
+                port: currentPort,
+                ssl: currentSsl,
+                username: currentUsername || null,
+                password: currentPassword || null,
+                group: currentGroup,
+                replyTo: currentArticle.messageId || currentArticle.number,
+                subject,
+                from,
+                body
+            })
+        });
+        
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || 'Failed to post reply');
+        }
+        
+        showToast('Reply sent successfully');
+        closeReplyModal();
+        
+        // Reload threads after a delay
+        setTimeout(() => {
+            if (currentGroup) {
+                loadThreads(currentGroup);
+            }
+        }, 2000);
+    } catch (err) {
+        showError(`Failed to post reply: ${err.message}`);
+    } finally {
+        hideLoading();
+    }
+}
+
 // Expose globally for HTML onclick
 window.refreshThreads = refreshThreads;
 window.showPane = showPane;
+window.toggleStarArticle = toggleStarArticle;
+window.shareArticle = shareArticle;
 
 // Virtual scrolling for mobile
 function initVirtualScrolling() {
@@ -351,10 +535,24 @@ function renderVirtualScroll() {
         const actualIndex = virtualScrollStartIndex + idx;
         const thread = virtualScrollItems[actualIndex];
         
-        item.addEventListener('click', () => {
-            loadArticle(thread.number);
+        item.addEventListener('click', (e) => {
+            // Don't load if clicking star button
+            if (e.target.closest('.star-btn')) {
+                return;
+            }
+            const articleNumber = thread.number || thread.article_number || 0;
+            loadArticle(articleNumber);
             showPane('article');
+            // Mark as read when opening
+            markArticleAsRead(articleNumber);
         });
+        
+        // Update read/star status for rendered items
+        const articleNumber = thread.number || thread.article_number || 0;
+        if (articleNumber) {
+            updateReadDisplay(articleNumber);
+            updateStarDisplay(articleNumber);
+        }
         
         // Add swipe actions
         setupSwipeActions(item, actualIndex);
@@ -362,20 +560,33 @@ function renderVirtualScroll() {
 }
 
 function renderThreadItem(thread, index) {
-    const indent = thread.depth * 1.5;
+    const indent = (thread.depth || 0) * 1.5;
     const subject = escapeHtml(thread.subject || '(no subject)');
     const from = escapeHtml(thread.from || 'unknown');
     const date = thread.date ? new Date(thread.date).toLocaleDateString() : '';
+    const articleNumber = thread.number || thread.article_number || 0;
+    const isRead = isArticleRead(articleNumber);
+    const isStarredStatus = isArticleStarred(articleNumber);
     
     return `
         <div 
-            class="mobile-thread-item touch-target"
+            class="mobile-thread-item touch-target ${isRead ? 'read opacity-60' : ''}"
             data-index="${index}"
-            data-article-number="${thread.number}"
+            data-article-number="${articleNumber}"
             style="padding-left: ${indent}rem;"
         >
             <div class="mobile-item-content">
-                <div class="mobile-item-title">${subject}</div>
+                <div class="flex items-center gap-2 mb-1">
+                    <button 
+                        class="star-btn text-lg leading-none p-1 ${isStarredStatus ? 'starred text-yellow-400' : 'text-gray-500'}"
+                        onclick="event.stopPropagation(); window.toggleStarArticle(${articleNumber});"
+                        aria-label="${isStarredStatus ? 'Unstar' : 'Star'} article"
+                        style="touch-action: manipulation;"
+                    >
+                        ${isStarredStatus ? '★' : '☆'}
+                    </button>
+                    <div class="mobile-item-title flex-1 ${isRead ? 'text-gray-400' : 'text-white'}">${subject}</div>
+                </div>
                 <div class="mobile-item-meta">
                     <span>${from}</span>
                     ${date ? `<span>${date}</span>` : ''}
@@ -438,16 +649,101 @@ function setupSwipeActions(element, index) {
     }, { passive: true });
 }
 
+// Starring functionality - persist in localStorage
+function getStarredArticles() {
+    const starred = localStorage.getItem('starredArticles');
+    return starred ? new Set(JSON.parse(starred)) : new Set();
+}
+
+function setStarredArticles(starredSet) {
+    localStorage.setItem('starredArticles', JSON.stringify(Array.from(starredSet)));
+}
+
+function isArticleStarred(articleNumber) {
+    const starred = getStarredArticles();
+    return starred.has(String(articleNumber));
+}
+
+function toggleStarArticle(articleNumber) {
+    const starred = getStarredArticles();
+    const articleKey = String(articleNumber);
+    
+    if (starred.has(articleKey)) {
+        starred.delete(articleKey);
+        showToast('Article unstarred');
+    } else {
+        starred.add(articleKey);
+        showToast('Article starred');
+    }
+    
+    setStarredArticles(starred);
+    updateStarDisplay(articleNumber);
+}
+
+function updateStarDisplay(articleNumber) {
+    const threadItem = threadsList.querySelector(`[data-article-number="${articleNumber}"]`);
+    if (threadItem) {
+        const starBtn = threadItem.querySelector('.star-btn');
+        if (starBtn) {
+            if (isArticleStarred(articleNumber)) {
+                starBtn.classList.add('starred');
+                starBtn.textContent = '★';
+            } else {
+                starBtn.classList.remove('starred');
+                starBtn.textContent = '☆';
+            }
+        }
+    }
+}
+
 function starArticle(index) {
-    // TODO: Implement starring functionality
-    console.log('Star article:', index);
-    showToast('Article starred');
+    const thread = virtualScrollItems[index];
+    if (thread && thread.number) {
+        toggleStarArticle(thread.number);
+    }
+}
+
+// Mark as read functionality - persist in localStorage
+function getReadArticles() {
+    const read = localStorage.getItem('readArticles');
+    return read ? new Set(JSON.parse(read)) : new Set();
+}
+
+function setReadArticles(readSet) {
+    localStorage.setItem('readArticles', JSON.stringify(Array.from(readSet)));
+}
+
+function isArticleRead(articleNumber) {
+    const read = getReadArticles();
+    return read.has(String(articleNumber));
+}
+
+function markArticleAsRead(articleNumber) {
+    const read = getReadArticles();
+    read.add(String(articleNumber));
+    setReadArticles(read);
+    updateReadDisplay(articleNumber);
+}
+
+function updateReadDisplay(articleNumber) {
+    const threadItem = threadsList.querySelector(`[data-article-number="${articleNumber}"]`);
+    if (threadItem) {
+        if (isArticleRead(articleNumber)) {
+            threadItem.classList.add('read');
+            threadItem.style.opacity = '0.6';
+        } else {
+            threadItem.classList.remove('read');
+            threadItem.style.opacity = '1';
+        }
+    }
 }
 
 function markAsRead(index) {
-    // TODO: Implement mark as read functionality
-    console.log('Mark as read:', index);
-    showToast('Marked as read');
+    const thread = virtualScrollItems[index];
+    if (thread && thread.number) {
+        markArticleAsRead(thread.number);
+        showToast('Marked as read');
+    }
 }
 
 // Load article (Level 3)
@@ -677,7 +973,7 @@ document.addEventListener('keydown', (e) => {
         case 'r':
             if (!e.ctrlKey && !e.metaKey && navigationState === 'article' && currentArticle) {
                 e.preventDefault();
-                // TODO: Open reply modal
+                openReplyModal();
             }
             break;
         case '/':

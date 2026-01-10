@@ -131,8 +131,9 @@
         }
         
         function shareArticle() {
-            // TODO: Implement share functionality
-            alert('Share functionality coming soon');
+            if (window.shareArticle) {
+                window.shareArticle();
+            }
         }
     </script>
     

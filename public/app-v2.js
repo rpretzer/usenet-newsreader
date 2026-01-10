@@ -42,6 +42,161 @@ const postModal = document.getElementById('post-modal');
 const loading = document.getElementById('loading');
 const error = document.getElementById('error');
 
+// Column resize state
+let isResizing = false;
+let resizeType = null; // 'groups' or 'reader'
+let startX = 0;
+let startWidth = 0;
+let paneGroups, paneThreads, paneReader;
+
+// ==================== COLUMN RESIZE FUNCTIONALITY ====================
+// Load saved column widths from localStorage
+function loadColumnWidths() {
+    if (!paneGroups || !paneReader) return;
+    
+    const savedGroupsWidth = localStorage.getItem('columnWidths_groups');
+    const savedReaderWidth = localStorage.getItem('columnWidths_reader');
+    
+    if (savedGroupsWidth) {
+        paneGroups.style.width = savedGroupsWidth;
+        paneGroups.style.flex = '0 0 auto';
+    }
+    
+    if (savedReaderWidth) {
+        paneReader.style.width = savedReaderWidth;
+        paneReader.style.flex = '0 0 auto';
+    }
+}
+
+// Save column widths to localStorage
+function saveColumnWidths() {
+    if (!paneGroups || !paneReader) return;
+    
+    const groupsWidth = paneGroups.offsetWidth;
+    const readerWidth = paneReader.offsetWidth;
+    
+    if (groupsWidth > 0) {
+        localStorage.setItem('columnWidths_groups', `${groupsWidth}px`);
+    }
+    if (readerWidth > 0) {
+        localStorage.setItem('columnWidths_reader', `${readerWidth}px`);
+    }
+}
+
+// Initialize column resize
+function initColumnResize() {
+    // Get pane elements
+    paneGroups = document.getElementById('pane-groups');
+    paneThreads = document.getElementById('pane-threads');
+    paneReader = document.getElementById('pane-reader');
+    
+    if (!paneGroups || !paneThreads || !paneReader) {
+        console.warn('Column resize: Pane elements not found');
+        return;
+    }
+    
+    // Load saved widths
+    loadColumnWidths();
+    
+    // Create resize handles
+    const groupsResizeHandle = document.createElement('div');
+    groupsResizeHandle.id = 'resize-handle-groups';
+    groupsResizeHandle.className = 'resize-handle resize-handle-vertical';
+    groupsResizeHandle.style.cssText = 'width: 4px; cursor: col-resize; background: transparent; position: relative; z-index: 10; user-select: none;';
+    
+    const readerResizeHandle = document.createElement('div');
+    readerResizeHandle.id = 'resize-handle-reader';
+    readerResizeHandle.className = 'resize-handle resize-handle-vertical';
+    readerResizeHandle.style.cssText = 'width: 4px; cursor: col-resize; background: transparent; position: relative; z-index: 10; user-select: none;';
+    
+    // Insert resize handles
+    if (paneGroups && paneGroups.parentNode) {
+        paneGroups.parentNode.insertBefore(groupsResizeHandle, paneThreads);
+    }
+    if (paneReader && paneReader.parentNode) {
+        paneReader.parentNode.insertBefore(readerResizeHandle, paneReader);
+    }
+    
+    // Add hover effect to resize handles
+    [groupsResizeHandle, readerResizeHandle].forEach(handle => {
+        handle.addEventListener('mouseenter', () => {
+            handle.style.background = 'rgba(0, 123, 255, 0.5)';
+        });
+        handle.addEventListener('mouseleave', () => {
+            if (!isResizing) {
+                handle.style.background = 'transparent';
+            }
+        });
+    });
+    
+    // Groups pane resize
+    groupsResizeHandle.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        isResizing = true;
+        resizeType = 'groups';
+        startX = e.clientX;
+        startWidth = paneGroups.offsetWidth;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        
+        groupsResizeHandle.style.background = 'rgba(0, 123, 255, 0.8)';
+    });
+    
+    // Reader pane resize
+    readerResizeHandle.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        isResizing = true;
+        resizeType = 'reader';
+        startX = e.clientX;
+        startWidth = paneReader.offsetWidth;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        
+        readerResizeHandle.style.background = 'rgba(0, 123, 255, 0.8)';
+    });
+    
+    // Mouse move handler
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        
+        const deltaX = e.clientX - startX;
+        
+        if (resizeType === 'groups') {
+            const newWidth = Math.max(200, Math.min(600, startWidth + deltaX));
+            paneGroups.style.width = `${newWidth}px`;
+            paneGroups.style.flex = '0 0 auto';
+        } else if (resizeType === 'reader') {
+            const newWidth = Math.max(300, Math.min(800, startWidth - deltaX));
+            paneReader.style.width = `${newWidth}px`;
+            paneReader.style.flex = '0 0 auto';
+        }
+    });
+    
+    // Mouse up handler
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            resizeType = null;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            
+            // Reset handle backgrounds
+            groupsResizeHandle.style.background = 'transparent';
+            readerResizeHandle.style.background = 'transparent';
+            
+            // Save widths
+            saveColumnWidths();
+        }
+    });
+    
+    // Prevent text selection while resizing
+    document.addEventListener('selectstart', (e) => {
+        if (isResizing) {
+            e.preventDefault();
+        }
+    });
+}
+
 // Helper functions
 function buildApiUrl(endpoint) {
     return `${API_BASE_URL}${endpoint}`;
@@ -771,4 +926,14 @@ function toggleKeyboardHelp() {
     }
     
     helpDiv.style.display = keyboardHelpVisible ? 'flex' : 'none';
+}
+
+// Initialize on DOM ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        initColumnResize();
+    });
+} else {
+    // DOM already loaded
+    initColumnResize();
 }
