@@ -164,18 +164,40 @@ async function loadThreads(groupName) {
             offset: 0
         });
         
-        const response = await fetch(buildApiUrl(`/api/groups/${encodeURIComponent(groupName)}/threads?${query}`));
-        if (!response.ok) {
+        // Try new threads endpoint first, fallback to old articles endpoint
+        let response = await fetch(buildApiUrl(`/api/groups/${encodeURIComponent(groupName)}/threads?${query}`));
+        
+        if (!response.ok && response.status === 404) {
+            // Fallback to old articles endpoint if threads endpoint doesn't exist
+            response = await fetch(buildApiUrl(`/api/groups/${encodeURIComponent(groupName)}/articles?${query}`));
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || 'Failed to load threads');
+            }
+            
+            // Convert old articles format to threads format
             const data = await response.json();
-            throw new Error(data.error || 'Failed to load threads');
-        }
-        
-        const data = await response.json();
-        virtualScrollItems = data.threads || [];
-        
-        // Update stats
-        if (data.stats) {
-            threadStats.textContent = `${data.stats.totalThreads} threads, ${data.stats.totalMessages} messages`;
+            const articles = data.articles || [];
+            virtualScrollItems = articles.map(a => ({
+                ...a,
+                depth: 0,
+                threadMessageCount: 1,
+                hasChildren: false
+            }));
+            
+            threadStats.textContent = `${articles.length} articles`;
+        } else {
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || 'Failed to load threads');
+            }
+            
+            const data = await response.json();
+            virtualScrollItems = data.threads || [];
+            
+            if (data.stats) {
+                threadStats.textContent = `${data.stats.totalThreads} threads, ${data.stats.totalMessages} messages`;
+            }
         }
         
         // Initialize virtual scrolling
@@ -184,6 +206,7 @@ async function loadThreads(groupName) {
         
     } catch (err) {
         showError(`Failed to load threads: ${err.message}`);
+        console.error('Load threads error:', err);
     }
 }
 
