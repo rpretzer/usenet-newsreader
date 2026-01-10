@@ -327,6 +327,21 @@ app.get('/api/groups/:group/threads', async (req, res) => {
     const client = await getConnection(server, port, ssl, username, password);
     const info = await client.group(groupName);
     
+    // Create/update group in database first
+    let serverId;
+    try {
+      serverId = db.getOrCreateServer(server, port, ssl, username);
+      // Cache the group info
+      db.cacheGroups(serverId, [{
+        name: groupName,
+        first: info.first,
+        last: info.last,
+        count: info.count || (info.last >= info.first ? info.last - info.first + 1 : 0)
+      }]);
+    } catch (dbErr) {
+      console.warn('Could not cache group:', dbErr.message);
+    }
+    
     // Get recent headers (last 500 for performance)
     const start = Math.max(info.first, info.last - 500);
     const end = info.last;
@@ -340,19 +355,17 @@ app.get('/api/groups/:group/threads', async (req, res) => {
       subject: h.subject || '',
       from: h.from || '',
       date: h.date || '',
-      message_id: h.messageId || '',
+      messageId: h.messageId || '',
       references: h.references || ''
     }));
     
     // Try to cache headers if database is available
     try {
-      const serverId = db.getOrCreateServer(server, port, ssl, username);
-      const dbGroup = db.getGroup(serverId, groupName);
-      if (dbGroup) {
+      if (serverId) {
         // Convert to format expected by cacheHeaders (camelCase)
         const cacheFormat = allHeaders.map(h => ({
           number: h.number,
-          messageId: h.message_id || h.messageId || '',
+          messageId: h.messageId || '',
           subject: h.subject || '',
           from: h.from || '',
           date: h.date || '',
