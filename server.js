@@ -2,6 +2,8 @@ const express = require('express');
 const path = require('path');
 const compression = require('compression');
 const NNTPClient = require('./nntp-client');
+const db = require('./db');
+const { buildThreadTree, flattenThreads, getThreadStats } = require('./threading');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -245,6 +247,138 @@ app.get('/api/groups/:group/articles', async (req, res) => {
       loaded: offset + articles.length
     });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// API: Get threaded headers (fallback - creates threads from articles)
+app.get('/api/groups/:group/threads', async (req, res) => {
+  try {
+    const groupName = decodeURIComponent(req.params.group);
+    const server = req.query.server || 'news.eternal-september.org';
+    const port = parseInt(req.query.port) || 119;
+    const ssl = req.query.ssl === 'true';
+    const username = req.query.username || null;
+    const password = req.query.password || null;
+    const limit = parseInt(req.query.limit) || 100;
+    const offset = parseInt(req.query.offset) || 0;
+    
+    // Try to use database if available, otherwise fallback to direct fetch
+    let allHeaders = [];
+    
+    try {
+      const serverId = db.getOrCreateServer(server, port, ssl, username);
+      const dbGroup = db.getGroup(serverId, groupName);
+      
+      if (dbGroup) {
+        const dbHeaders = db.getAllHeadersForThreading(serverId, groupName);
+        
+        // Convert database format (snake_case) to threading format (camelCase)
+        allHeaders = dbHeaders.map(h => ({
+          number: h.article_number || 0,
+          subject: h.subject || '',
+          from: h.from_addr || '',
+          date: h.date || '',
+          messageId: h.message_id || '',
+          references: h.references || ''
+        }));
+        
+        // Build thread tree
+        const rootThreads = buildThreadTree(allHeaders);
+        const flattened = flattenThreads(rootThreads);
+        const paginated = flattened.slice(offset, offset + limit);
+        const stats = getThreadStats(rootThreads);
+        
+        res.json({
+          threads: paginated,
+          stats: stats,
+          hasMore: (offset + limit) < flattened.length,
+          total: flattened.length
+        });
+        
+        // Background sync
+        (async () => {
+          try {
+            const client = await getConnection(server, port, ssl, username, password);
+            await client.group(groupName);
+            const info = await client.group(groupName);
+            
+            // Fetch latest headers if needed
+            const start = Math.max(info.first, info.last - 500);
+            const end = info.last;
+            const headers = await client.getHeaders(start, end);
+            
+            if (headers && headers.length > 0) {
+              // Headers already in correct format (camelCase) for cacheHeaders
+              db.cacheHeaders(serverId, groupName, headers);
+            }
+          } catch (err) {
+            console.error('Background headers sync error:', err);
+          }
+        })();
+        
+        return;
+      }
+    } catch (dbErr) {
+      console.warn('Database not available, falling back to direct fetch:', dbErr.message);
+    }
+    
+    // Fallback: Fetch directly from NNTP and build threads
+    const client = await getConnection(server, port, ssl, username, password);
+    const info = await client.group(groupName);
+    
+    // Get recent headers (last 500 for performance)
+    const start = Math.max(info.first, info.last - 500);
+    const end = info.last;
+    
+    // Fetch headers
+    const headers = await client.getHeaders(start, end);
+    
+    // Convert to threading format (ensure all required fields)
+    allHeaders = headers.map(h => ({
+      number: h.number || 0,
+      subject: h.subject || '',
+      from: h.from || '',
+      date: h.date || '',
+      message_id: h.messageId || '',
+      references: h.references || ''
+    }));
+    
+    // Try to cache headers if database is available
+    try {
+      const serverId = db.getOrCreateServer(server, port, ssl, username);
+      const dbGroup = db.getGroup(serverId, groupName);
+      if (dbGroup) {
+        // Convert to format expected by cacheHeaders (camelCase)
+        const cacheFormat = allHeaders.map(h => ({
+          number: h.number,
+          messageId: h.message_id || h.messageId || '',
+          subject: h.subject || '',
+          from: h.from || '',
+          date: h.date || '',
+          references: h.references || ''
+        }));
+        db.cacheHeaders(serverId, groupName, cacheFormat);
+      }
+    } catch (cacheErr) {
+      console.warn('Could not cache headers:', cacheErr.message);
+    }
+    
+    // Build thread tree
+    const rootThreads = buildThreadTree(allHeaders);
+    const flattened = flattenThreads(rootThreads);
+    const paginated = flattened.slice(offset, offset + limit);
+    const stats = getThreadStats(rootThreads);
+    
+    res.json({
+      threads: paginated,
+      stats: stats,
+      hasMore: (offset + limit) < flattened.length,
+      total: flattened.length
+    });
+    
+  } catch (error) {
+    console.error('Threads endpoint error:', error);
     res.status(500).json({ error: error.message });
   }
 });

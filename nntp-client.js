@@ -267,7 +267,8 @@ class NNTPClient {
               subject: parts[1] || '(no subject)',
               from: parts[2] || 'unknown',
               date: parts[3] || '',
-              messageId: parts[4] || ''
+              messageId: parts[4] || '',
+              references: parts[5] || '' // XOVER field 6 (index 5) contains References header
             });
           }
         }

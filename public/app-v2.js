@@ -197,6 +197,8 @@ async function loadThreads(groupName) {
             
             if (data.stats) {
                 threadStats.textContent = `${data.stats.totalThreads} threads, ${data.stats.totalMessages} messages`;
+            } else {
+                threadStats.textContent = `${virtualScrollItems.length} threads`;
             }
         }
         
