@@ -362,7 +362,13 @@ async function loadThreads(groupName) {
         renderVirtualScroll();
         
     } catch (err) {
-        showError(`Failed to load threads: ${err.message}`);
+        // Check if error message looks like a message ID (contains '!')
+        let errorMsg = err.message || 'Failed to load threads';
+        if (errorMsg.includes('!') && errorMsg.includes('@')) {
+            // Looks like a message ID - use generic error
+            errorMsg = 'Failed to load threads - server error';
+        }
+        showError(`Failed to load threads: ${errorMsg}`);
         console.error('Load threads error:', err);
     }
 }
