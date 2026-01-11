@@ -392,7 +392,17 @@ app.get('/api/groups/:group/threads', async (req, res) => {
     
   } catch (error) {
     console.error('Threads endpoint error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('Error stack:', error.stack);
+    // Ensure we don't send a message ID as an error message
+    // Message IDs contain '!' so if error message contains '!', it's likely a message ID
+    let errorMessage = 'Failed to load threads';
+    if (error.message && !error.message.includes('!')) {
+      errorMessage = error.message;
+    } else if (error.message && error.message.trim()) {
+      // If it contains '!' but is not just whitespace, use it but prefix with context
+      errorMessage = `Error processing threads: ${error.message}`;
+    }
+    res.status(500).json({ error: errorMessage });
   }
 });
 
